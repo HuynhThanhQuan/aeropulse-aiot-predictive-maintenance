@@ -1,0 +1,8 @@
+-r requirements-runtime.txt
+httpx>=0.28,<1
+onnx>=1.17,<2
+pandas>=2.2,<3
+pytest>=8.3,<9
+ruff>=0.9,<1
+scikit-learn>=1.5,<2
+torch>=2.5,<3

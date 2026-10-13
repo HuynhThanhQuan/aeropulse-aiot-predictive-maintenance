@@ -1,0 +1,83 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  influxdb:
+    image: influxdb:2.7
+    ports:
+      - "127.0.0.1:${INFLUXDB_PORT:-8086}:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD:?Set INFLUXDB_PASSWORD in .env}
+      DOCKER_INFLUXDB_INIT_ORG: aiot
+      DOCKER_INFLUXDB_INIT_BUCKET: telemetry
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN:?Set INFLUXDB_TOKEN in .env}
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    restart: unless-stopped
+
+  edge:
+    build: .
+    command: ["python", "-m", "aiot_pm.edge_service"]
+    environment: &app-environment
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_ORG: aiot
+      INFLUXDB_BUCKET: telemetry
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?Set INFLUXDB_TOKEN in .env}
+      MODEL_PATH: models/tiny_cnn_int8.onnx
+      METADATA_PATH: models/metadata.json
+    volumes:
+      - ./models:/app/models:ro
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
+  storage:
+    build: .
+    command: ["python", "-m", "aiot_pm.storage_service"]
+    environment: *app-environment
+    depends_on:
+      - mosquitto
+      - influxdb
+    restart: unless-stopped
+
+  controller:
+    build: .
+    command: ["python", "-m", "aiot_pm.controller_service"]
+    environment: *app-environment
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    command: ["python", "-m", "aiot_pm.dashboard"]
+    environment: *app-environment
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-8010}:8000"
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
+  simulator:
+    build: .
+    command: ["python", "-m", "aiot_pm.simulator", "--engine", "100", "--interval", "0.25"]
+    environment: *app-environment
+    volumes:
+      - ./data/raw:/app/data/raw:ro
+    depends_on:
+      - mosquitto
+      - edge
+      - dashboard
+    restart: unless-stopped
+
+volumes:
+  influxdb-data:

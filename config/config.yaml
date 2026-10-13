@@ -1,0 +1,46 @@
+project:
+  dataset: FD001
+  data_dir: data/raw
+  processed_dir: data/processed
+  model_dir: models
+  results_dir: results
+
+data:
+  window_size: 30
+  warning_rul: 30
+  validation_engine_fraction: 0.2
+  sensors: [2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 20, 21]
+
+training:
+  seed: 42
+  epochs: 12
+  batch_size: 128
+  learning_rate: 0.001
+  patience: 4
+  calibration_samples: 512
+
+mqtt:
+  host: localhost
+  port: 1883
+  keepalive: 60
+  telemetry_topic: aiot/engine/+/telemetry
+  prediction_topic: aiot/engine/+/prediction
+  alert_topic: aiot/engine/+/alert
+  status_topic: aiot/engine/+/status
+  command_topic: aiot/engine/+/command
+
+influxdb:
+  url: http://localhost:8086
+  org: aiot
+  bucket: telemetry
+  token: ""
+
+simulator:
+  engine_id: 100
+  interval_seconds: 0.5
+  loop: true
+
+edge:
+  model_path: models/tiny_cnn_int8.onnx
+  metadata_path: models/metadata.json
+  alert_cooldown_seconds: 10

@@ -1,0 +1,19 @@
+{
+  "train_rows": 20631,
+  "test_rows": 13096,
+  "train_engines": 80,
+  "validation_engines": 20,
+  "validation_windows": 3272,
+  "validation_positives": 620,
+  "training_windows": 14459,
+  "parameters": 4185,
+  "threshold": 0.64,
+  "demo_engine_in_training": false,
+  "sha256": {
+    "models/tiny_cnn_fp32.onnx": "e744d34bd68d37c8bc7d7cff247c6da52455fa0627cece04772fb3f358b04bcc",
+    "models/tiny_cnn_int8.onnx": "f24826c261b6fe30e9172a0962ddcab5478ba94569eb6c7acd66cc267febb045",
+    "models/metadata.json": "49beff385ed6ab518080962aab7644fbb1d9dc0fd642d89bcf79683fe6b6493d",
+    "data/raw/test_FD001.txt": "3cda7109ce17bafb5443f2ac926cfcf88154b941b8c4cf95eb55d1ddd6f52851",
+    "data/raw/RUL_FD001.txt": "a19c8ec94931949d0485bdc35118206e9c81c4547b422efb9cf86f4ceddbceca"
+  }
+}

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AeroPulse | Edge Maintenance Console</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-block">
+        <span class="brand-mark" aria-hidden="true">AP</span>
+        <div>
+          <h1>AeroPulse</h1>
+          <p>Edge maintenance console</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <label for="engine-select">Engine</label>
+        <select id="engine-select" aria-label="Engine"></select>
+        <span id="connection" class="connection"><span class="status-dot"></span>Connecting</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="overview" aria-label="Current engine status">
+        <div class="metric">
+          <span class="metric-label">Operating cycle</span>
+          <strong id="cycle-value">--</strong>
+          <span id="engine-value" class="metric-detail">Waiting for telemetry</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Failure risk</span>
+          <strong id="risk-value">--</strong>
+          <span id="probability-value" class="metric-detail">No prediction yet</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Edge latency</span>
+          <strong id="latency-value">--</strong>
+          <span class="metric-detail">ONNX INT8, batch 1</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Maintenance</span>
+          <strong id="maintenance-value">--</strong>
+          <span id="state-value" class="metric-detail">Awaiting device state</span>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <article class="panel risk-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">EDGE INFERENCE</p>
+              <h2>Failure probability</h2>
+            </div>
+            <span id="risk-badge" class="badge badge-neutral">NO DATA</span>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="risk-chart" aria-label="Failure probability chart"></canvas>
+          </div>
+        </article>
+
+        <article class="panel sensor-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">LIVE TELEMETRY</p>
+              <h2>Sensor trend</h2>
+            </div>
+            <select id="sensor-select" aria-label="Sensor channel"></select>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="sensor-chart" aria-label="Sensor trend chart"></canvas>
+          </div>
+        </article>
+
+        <article class="panel event-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">EVENT STREAM</p>
+              <h2>Alerts and commands</h2>
+            </div>
+            <span id="event-count" class="count">0</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Time</th><th>Type</th><th>State</th><th>Detail</th></tr>
+              </thead>
+              <tbody id="event-body">
+                <tr><td colspan="4" class="empty">No events received</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <aside class="panel control-panel">
+          <div>
+            <p class="eyebrow">CLOSED LOOP</p>
+            <h2>Maintenance control</h2>
+          </div>
+          <div class="control-state">
+            <span>Controller state</span>
+            <strong id="controller-state">Standby</strong>
+          </div>
+          <button id="schedule-button" class="button button-primary" type="button">
+            Schedule maintenance
+          </button>
+          <button id="reset-button" class="button button-secondary" type="button">
+            Reset maintenance flag
+          </button>
+          <p id="command-result" class="command-result" aria-live="polite"></p>
+        </aside>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aiot-predictive-maintenance"
+version = "0.1.0"
+description = "End-to-end AIoT predictive maintenance for NASA C-MAPSS turbofan engines"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "influxdb-client>=1.48,<2",
+  "numpy>=1.26,<3",
+  "onnxruntime>=1.20,<2",
+  "paho-mqtt>=2.1,<3",
+  "psutil>=6,<8",
+  "PyYAML>=6,<7",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+train = [
+  "onnx>=1.17,<2",
+  "pandas>=2.2,<3",
+  "scikit-learn>=1.5,<2",
+  "torch>=2.5,<3",
+]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.3,<9",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+aiot-download = "aiot_pm.download_data:main"
+aiot-train = "aiot_pm.train:main"
+aiot-benchmark = "aiot_pm.benchmark:main"
+aiot-simulator = "aiot_pm.simulator:main"
+aiot-edge = "aiot_pm.edge_service:main"
+aiot-storage = "aiot_pm.storage_service:main"
+aiot-controller = "aiot_pm.controller_service:main"
+aiot-dashboard = "aiot_pm.dashboard:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

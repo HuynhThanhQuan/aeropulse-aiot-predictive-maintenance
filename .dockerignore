@@ -1,0 +1,10 @@
+*
+!Dockerfile
+!requirements-runtime.txt
+!config/
+!config/**
+!src/
+!src/aiot_pm/
+!src/aiot_pm/*.py
+!web/
+!web/**

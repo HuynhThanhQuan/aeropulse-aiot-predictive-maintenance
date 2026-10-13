@@ -1,0 +1,39 @@
+[
+  {
+    "model": "tiny_cnn_fp32.onnx",
+    "model_size_kb": 17.63671875,
+    "accuracy": 0.9529339853300733,
+    "precision": 0.9059233449477352,
+    "recall": 0.8387096774193549,
+    "f1": 0.8710217755443886,
+    "roc_auc": 0.9857520799883229,
+    "latency_mean_ms": 0.05964030666666666,
+    "latency_p50_ms": 0.015542,
+    "latency_p95_ms": 0.13520000000000018,
+    "throughput_fps": 16767.18407215881,
+    "rss_before_mb": 154.15625,
+    "rss_after_load_mb": 163.3125,
+    "rss_after_inference_mb": 189.046875,
+    "samples_evaluated": 3272,
+    "latency_runs": 300
+  },
+  {
+    "model": "tiny_cnn_int8.onnx",
+    "model_size_kb": 13.25,
+    "accuracy": 0.953239608801956,
+    "precision": 0.9075043630017452,
+    "recall": 0.8387096774193549,
+    "f1": 0.8717518860016764,
+    "roc_auc": 0.9858037756045347,
+    "latency_mean_ms": 0.10821721333333334,
+    "latency_p50_ms": 0.0142705,
+    "latency_p95_ms": 0.11549580000000018,
+    "throughput_fps": 9240.6740960865,
+    "rss_before_mb": 150.5625,
+    "rss_after_load_mb": 160.859375,
+    "rss_after_inference_mb": 170.28125,
+    "samples_evaluated": 3272,
+    "latency_runs": 300,
+    "size_reduction_percent": 24.872646733111846
+  }
+]
