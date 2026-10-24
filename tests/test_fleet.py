@@ -155,3 +155,21 @@ def test_fleet_page_and_api_do_not_require_a_live_database(monkeypatch) -> None:
         assert trend.json()["window"] == "1h"
         home = client.get("/")
         assert 'href="/fleet"' in home.text
+
+
+def test_retired_engine_does_not_affect_fleet_counts_or_ranking(monkeypatch):
+    from aiot_pm.fleet import FleetService
+
+    class Reader:
+        def latest(self):
+            return [record('FD001-TEST-001', .99), record('FD001-TEST-034', .1)]
+
+    monkeypatch.setenv('DASHBOARD_EXCLUDED_ENGINES', 'FD001-TEST-001')
+    service = FleetService(
+        Reader(), alert_threshold=.64, watch_threshold=.448,
+        stale_after_seconds=60, lookback='24h', refresh_seconds=10,
+    )
+    result = service.snapshot(now=datetime(2026, 10, 21, tzinfo=UTC))
+    assert result['summary']['total_engines'] == 1
+    assert result['summary']['critical_engines'] == 0
+    assert [row['engine_id'] for row in result['ranking']] == ['FD001-TEST-034']

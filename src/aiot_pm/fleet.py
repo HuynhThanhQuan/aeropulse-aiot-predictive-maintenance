@@ -15,6 +15,7 @@ from string import Template
 from typing import Any
 
 from .config import ROOT, load_config, project_path
+from .engine_origin import is_displayed_engine
 
 LOGGER = logging.getLogger(__name__)
 QUERY_DIR = ROOT / "dashboard" / "queries"
@@ -30,7 +31,7 @@ BINS = (
 )
 REGISTRY_NOTE = (
     "Total engines are those with a prediction in the lookback window. "
-    "There is no static engine registry."
+    "Retired engines configured in DASHBOARD_EXCLUDED_ENGINES are excluded."
 )
 REPLAY_NOTE = (
     "A sudden drop is a simulator replay when cycle restarts. "
@@ -469,7 +470,7 @@ class FleetService:
             if now is None and self._snapshot is not None and age < 2:
                 return self._snapshot
             built = build_snapshot(
-                self.reader.latest(),
+                [record for record in self.reader.latest() if is_displayed_engine(record.engine_id)],
                 now=now or datetime.now(UTC),
                 alert_threshold=self.alert_threshold,
                 watch_threshold=self.watch_threshold,

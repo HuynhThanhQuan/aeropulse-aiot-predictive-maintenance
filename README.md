@@ -12,7 +12,7 @@ For the presentation, start with the [Vietnamese walkthrough](docs/defense-guide
 
 ```mermaid
 flowchart LR
-    Data["NASA FD001 replay data<br/>Development engines 095–100 + test engines 001–006"] --> Sim["12 engine simulators"]
+    Data["NASA FD001 replay data<br/>Development engines 095–100 + test engines 002–006 and 034"] --> Sim["12 engine simulators"]
     Sim -->|telemetry| Broker["Mosquitto<br/>MQTT broker"]
     Sim -->|status: command acknowledgement| Broker
     Broker -->|command: schedule or reset maintenance| Sim
@@ -47,7 +47,7 @@ Read the diagram from the simulators through Mosquitto to the consumers. Edge ke
 The two dashboards read different sources: the engine console follows MQTT messages and keeps a local SQLite cache, while the fleet overview reads stored predictions from InfluxDB using Flux. Arrows show message or data flow; they do not represent separate containers for every box.
 
 
-Docker Compose starts eighteen services: `mosquitto`, `influxdb`, `edge`, `storage`, `dashboard`, `controller`, `simulator` (100), `simulator_095` through `simulator_099`, and `simulator_test_001` through `simulator_test_006`. Training runs on the host; runtime containers do not install PyTorch. The engine console subscribes to MQTT and persists a bounded SQLite cache. The fleet dashboard queries historical InfluxDB predictions through server-side Flux.
+Docker Compose starts eighteen services: `mosquitto`, `influxdb`, `edge`, `storage`, `dashboard`, `controller`, `simulator` (100), `simulator_095` through `simulator_099`, and `simulator_test_002` through `simulator_test_006`, plus `simulator_test_034`. Training runs on the host; runtime containers do not install PyTorch. The engine console subscribes to MQTT and persists a bounded SQLite cache. The fleet dashboard queries historical InfluxDB predictions through server-side Flux.
 
 | Topic suffix under `aiot/engine/{id}/` | Producer | Consumers |
 | --- | --- | --- |
@@ -67,11 +67,11 @@ Both dashboards show a Train, Validation or Test label. Train/Validation members
 | --- | --- | --- |
 | FD001-095, 096, 097, 099 | `train_FD001.txt` | Train |
 | FD001-098, 100 | `train_FD001.txt` | Validation |
-| FD001-TEST-001 through 006 | `test_FD001.txt` | Test |
+| FD001-TEST-002 through 006, FD001-TEST-034 | `test_FD001.txt` | Test |
 
-The six test engines are the first six IDs, selected without looking at prediction quality. Their distinct MQTT IDs keep their buffers, commands and stored history separate from training-file engines with the same numbers. To replay another test engine manually, use `python -m aiot_pm.simulator --split test --engine 7` in the configured environment.
+The demo initially used test IDs 001–006. TEST-001 was replaced by TEST-034, selected for the lowest official endpoint RUL (7 cycles), to demonstrate a near-failure case. This is a deliberately selected demo case, not a representative accuracy sample. See the [RUL audit](docs/test-replay-rul-audit.md). Their distinct MQTT IDs keep their buffers, commands and stored history separate from training-file engines with the same numbers. To replay another test engine manually, use `python -m aiot_pm.simulator --split test --engine 7` in the configured environment.
 
-Test trajectories end before failure. Engine TEST-001 has only 31 observed cycles; after each replay restart, its console waits for a new 30-cycle window before predicting again. The simulator sends sensor data only; it does not send ground-truth RUL to inference. Keep the model and threshold fixed while viewing test replay. This live demo is not a new accuracy measurement; use the official evaluation script for test metrics across all 100 test engines.
+Test trajectories end before failure. After each replay restart, the console waits for a new 30-cycle window before predicting again. The stopped TEST-001 remains in storage but is hidden from both dashboard lists and fleet totals through `DASHBOARD_EXCLUDED_ENGINES`. The simulator sends sensor data only; it does not send ground-truth RUL to inference. Keep the model and threshold fixed while viewing test replay. This live demo is not a new accuracy measurement; use the official evaluation script for test metrics across all 100 test engines.
 
 ## Before you start
 

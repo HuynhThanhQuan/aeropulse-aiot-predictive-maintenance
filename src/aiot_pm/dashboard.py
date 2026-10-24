@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from .config import ROOT, load_config
 from .dashboard_cache import DashboardCache, resolve_cache_path
-from .engine_origin import dataset_split
+from .engine_origin import dataset_split, is_displayed_engine
 from .fleet import FleetDataError, FleetService
 from .mqtt_utils import create_client
 from .schema import engine_topic, topic_engine_id, utc_now
@@ -201,7 +201,10 @@ class DashboardState:
     def snapshot(self, requested_engine: str | None = None) -> dict[str, Any]:
         connected = bool(self.client.is_connected())
         with self.lock:
-            engines = sorted(set(self.telemetry) | set(self.predictions) | set(self.status))
+            engines = sorted(
+                key for key in set(self.telemetry) | set(self.predictions) | set(self.status)
+                if is_displayed_engine(key)
+            )
             # Giữ đúng engine được hỏi kể cả khi chưa có tin, không trả dữ liệu của engine khác.
             if requested_engine:
                 engine_id = requested_engine

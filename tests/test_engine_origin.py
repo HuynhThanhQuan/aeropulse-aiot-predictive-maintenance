@@ -74,3 +74,19 @@ def test_commands_cannot_cross_train_test_identity(tmp_path):
         topic="aiot/engine/FD001-TEST-001/command", payload=payload,
     ))
     assert simulator.maintenance_scheduled
+
+
+def test_retired_engine_excluded_from_console_without_deleting_data(monkeypatch):
+    from aiot_pm.config import load_config
+    from aiot_pm.dashboard import DashboardState
+    from aiot_pm.engine_origin import is_displayed_engine
+
+    monkeypatch.setenv('DASHBOARD_EXCLUDED_ENGINES', ' FD001-TEST-001 ')
+    state = DashboardState(load_config())
+    state.status['FD001-TEST-001'] = {'state': 'offline'}
+    state.status['FD001-TEST-034'] = {'state': 'online'}
+    assert state.snapshot()['engines'] == ['FD001-TEST-034']
+    assert 'FD001-TEST-001' in state.status
+    assert is_displayed_engine('FD001-TEST-034')
+    monkeypatch.delenv('DASHBOARD_EXCLUDED_ENGINES')
+    assert is_displayed_engine('FD001-TEST-001')

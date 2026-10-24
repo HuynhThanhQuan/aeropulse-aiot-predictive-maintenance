@@ -1,6 +1,7 @@
 """Resolve replay provenance against the deployed model's split metadata."""
 
 import json
+import os
 import re
 
 from .config import load_config, project_path
@@ -25,3 +26,9 @@ def dataset_split(engine_id: str | None) -> str:
     if number in metadata.get("validation_engine_ids", []):
         return "Validation"
     return "Unknown"
+
+
+def is_displayed_engine(engine_id: str) -> bool:
+    """Hide retired replay engines without deleting their stored observations."""
+    excluded = os.getenv("DASHBOARD_EXCLUDED_ENGINES", "").split(",")
+    return engine_id not in {item.strip() for item in excluded if item.strip()}
