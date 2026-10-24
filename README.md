@@ -8,7 +8,10 @@ To run it yourself, install the Python dependencies, download the dataset, train
 
 For the presentation, start with the [Vietnamese walkthrough](docs/defense-guide-vi.md), [measurement notes](docs/metrics-20261022.md), and [defense questions](docs/defense-questions-vi.md). They describe the checked model at threshold 0.64. If you retrain, use the threshold and results from your own run.
 
-## How it works
+**Start here:** [Architecture](#architecture) · [Quickstart](#quickstart) · [Benchmark results](#benchmark-results) · [AI Disclosure](#ai-disclosure)
+
+<a id="how-it-works"></a>
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -85,7 +88,12 @@ The recorded host environment is Python 3.11.13, PyTorch 2.14.0, ONNX 1.23.0, ON
 
 Earlier reproduction checks are recorded in [docs/reproduction-check.md](docs/reproduction-check.md). Native Linux host training, Windows, WSL2 and physical edge hardware have not been verified. On Windows, use WSL2 with Docker integration and the POSIX commands below; treat that path as untested. Do not force macOS-specific pins such as `uvloop` onto native Windows.
 
-## Install
+## Quickstart
+
+Follow these steps from the repository root, using the [prerequisites above](#before-you-start). A fresh clone needs a dataset download and local training because weights are not distributed. Steps 1–4 take you to the running dashboards; step 5 checks the installation. Platform details and measurement caveats are included alongside the commands.
+
+<a id="install"></a>
+### 1. Clone and install dependencies
 
 ```bash
 git clone https://github.com/HuynhThanhQuan/aeropulse-aiot-predictive-maintenance.git
@@ -108,7 +116,8 @@ uv pip freeze --python .venv/bin/python > results/environment.txt
 
 `make setup` is the range-based installation shortcut. Activation is optional because all subsequent host commands use `.venv/bin/python` explicitly. Keep the checkout: the application reads `config/` and `web/` directly from it.
 
-## Download the data
+<a id="download-the-data"></a>
+### 2. Download the dataset
 
 ```bash
 make download
@@ -122,7 +131,8 @@ The downloader skips an existing complete set of filenames; it does not rehash i
 
 Dataset reference: A. Saxena, K. Goebel, D. Simon, D. Eklund, *Damage Propagation Modeling for Aircraft Engine Run-to-Failure Simulation*, PHM 2008.
 
-## Train and measure the model
+<a id="train-and-measure-the-model"></a>
+### 3. Train, export and measure the model
 
 ```bash
 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONUNBUFFERED=1 make train
@@ -154,7 +164,8 @@ Expected generated outputs (ignored by Git):
 
 Official test RUL is `max_observed_cycle - cycle + RUL_FD001 endpoint`. The measurement script freezes the metadata threshold and evaluates both 10,196 overlapping windows and one final window per engine. Report the two test scopes separately. Retraining can change the model, threshold and scores, so keep the outputs from your run even when they differ from the reference.
 
-## Run the demo
+<a id="run-the-demo"></a>
+### 4. Configure and start the demo
 
 ```bash
 cp .env.example .env
@@ -227,7 +238,8 @@ docker compose down
 
 This stops the demo and preserves its named database volume. Deleting the volume destroys stored observations; do so only when you deliberately want a new empty demo database. Do not alter or stop unrelated Compose projects.
 
-## Checks and troubleshooting
+<a id="checks-and-troubleshooting"></a>
+### 5. Verify and troubleshoot
 
 ```bash
 make test
@@ -252,7 +264,8 @@ The tests cover data splitting, preprocessing, messages, storage, fleet queries,
 | Maintenance already true after replay loops | Expected state retention; reset and inspect timestamped events. |
 | INT8 slower than FP32 | Report actual timings; this very small model can be dominated by runtime overhead. |
 
-## Reference results and limits
+<a id="reference-results-and-limits"></a>
+## Benchmark results
 
 The table below records the 12 October 2026 run. The [22 October measurement notes](docs/metrics-20261022.md) cover the later six-engine demo and its measurements. Neither set is a target that a fresh training run must match. The model hashes are in [dataset-model.json](docs/reference-results/dataset-model.json). Original weights remain local and are not included here.
 
@@ -288,7 +301,8 @@ This is simulated run-to-failure data and a binary early-warning classifier, not
 
 This repository contains the coursework source with a fresh Git history. Course handouts, report drafts, recordings and private workspace files are excluded. No software license has been added; public access alone does not grant permission to redistribute the code. Dependencies and the dataset retain their own terms.
 
-## AI Disclaimer
+<a id="ai-disclaimer"></a>
+## AI Disclosure
 
 This project was developed with assistance from OpenAI Codex. AI assistance included code scaffolding and implementation, debugging, test development, measurement scripts, dashboard updates, documentation, and architecture diagrams.
 
