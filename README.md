@@ -1,22 +1,14 @@
-# AeroPulse — reproducible AIoT predictive maintenance
+# AeroPulse
 
-AeroPulse is an AIoT final-coursework software prototype. It replays NASA C-MAPSS FD001 turbofan data, predicts early failure risk with an ONNX INT8 1D-CNN, stores observations in InfluxDB, displays a live dashboard, and closes the loop with a simulated maintenance command.
+AeroPulse is a predictive-maintenance demo built for our AIoT final project. Six simulated turbofan engines replay NASA C-MAPSS FD001 sensor data. A small 1D-CNN estimates failure risk, and the dashboard lets you follow each engine as its condition changes. When risk crosses the model's threshold, a controller sends a maintenance command back to the simulator.
 
-**For an AI agent on a new computer:** follow the numbered procedure below from the repository root. Download data and train before starting the containers. No trained weights, datasets, course handouts, student reports, credentials, or original workspace history are distributed. Do not infer successful reproduction from this README's historical scores: generate and retain your own outputs.
+The demo runs locally with Docker, MQTT and InfluxDB. It uses recorded data rather than physical sensors, and a maintenance command changes the simulator's state; it does not simulate a repair.
 
-## October 22 integration
+To run it yourself, install the Python dependencies, download the dataset, train the model, then start the containers. This repository contains the source and selected measurement summaries. Datasets, trained weights, credentials and runtime caches stay local.
 
-The source now includes six replay engines, [Fleet dashboard](http://localhost:8010/fleet), per-engine freshness, SQLite offline cache and an InfluxDB general dashboard. See the [Vietnamese walkthrough](docs/defense-guide-vi.md), [measurement notes](docs/metrics-20261022.md), and [defense questions](docs/defense-questions-vi.md). These notes describe the original verified model at threshold 0.64; a fresh training run must use its own metadata and measurements. Model weights remain excluded.
+For the presentation, start with the [Vietnamese walkthrough](docs/defense-guide-vi.md), [measurement notes](docs/metrics-20261022.md), and [defense questions](docs/defense-questions-vi.md). They describe the checked model at threshold 0.64. If you retrain, use the threshold and results from your own run.
 
-Once Compose is running and `.env` is configured, install the optional InfluxDB dashboard:
-
-```bash
-INFLUXDB_URL=http://localhost:8086 INFLUXDB_ORG=aiot INFLUXDB_BUCKET=telemetry .venv/bin/python dashboard/create_general_dashboard.py
-```
-
-The script prints the dashboard URL. Fleet is available at `/fleet`, the engine console at `/?engine=FD001-100`. Ports bind to localhost. Do not copy another person's `.env`, cache, datasets or generated artifacts into this public repository.
-
-## 1. Architecture and scope
+## How it works
 
 ```mermaid
 flowchart LR
@@ -26,14 +18,15 @@ flowchart LR
     Edge -->|prediction and alert| MQTT
     MQTT --> Storage[Storage service]
     Storage --> DB[InfluxDB 2.7]
-    MQTT --> UI[FastAPI dashboard]
+    MQTT --> UI[Engine console]
+    DB --> Fleet[Fleet dashboard]
     MQTT --> Controller[Maintenance controller]
     Controller -->|command| MQTT
     MQTT -->|command| Simulator
     Simulator -->|acknowledged status| MQTT
 ```
 
-Twelve Compose services (including six simulator instances): `mosquitto`, `influxdb`, `edge`, `storage`, `dashboard`, `controller`, `simulator` (100), and `simulator_095` through `simulator_099`. Training runs on the host; runtime containers do not install PyTorch. The engine console subscribes to MQTT and persists a bounded SQLite cache. The fleet dashboard queries historical InfluxDB predictions through server-side Flux.
+Docker Compose starts twelve services: `mosquitto`, `influxdb`, `edge`, `storage`, `dashboard`, `controller`, `simulator` (100), and `simulator_095` through `simulator_099`. Training runs on the host; runtime containers do not install PyTorch. The engine console subscribes to MQTT and persists a bounded SQLite cache. The fleet dashboard queries historical InfluxDB predictions through server-side Flux.
 
 | Topic suffix under `aiot/engine/{id}/` | Producer | Consumers |
 | --- | --- | --- |
@@ -43,9 +36,9 @@ Twelve Compose services (including six simulator instances): `mosquitto`, `influ
 | `command` | controller or dashboard | simulator, dashboard |
 | `status` | simulator | controller, storage, dashboard |
 
-Messages use JSON and QoS 1. See [schema.py](src/aiot_pm/schema.py) for telemetry and prediction fields. The replay IDs are `FD001-095` through `FD001-100`. `schedule_maintenance` changes a Boolean state; it does not repair an engine or actuate hardware. `reset_maintenance` clears that state. Replay loops and resets rolling inference buffers when cycle numbers restart; maintenance state may stay true across loops.
+The services exchange JSON messages over MQTT with QoS 1. See [schema.py](src/aiot_pm/schema.py) for telemetry and prediction fields. The replay IDs are `FD001-095` through `FD001-100`. `schedule_maintenance` changes a Boolean state; it does not repair an engine or actuate hardware. `reset_maintenance` clears that state. When a replay starts over, inference clears its rolling window. The maintenance flag can remain set until you reset it.
 
-## 2. Prerequisites and compatibility
+## Before you start
 
 - Git, `uv`, Python **3.11** (project permits 3.11–3.12), and a POSIX shell. Run all commands from the cloned root; the editable installation resolves configuration relative to the source checkout.
 - Docker Engine/Desktop with Compose v2, running before the demo. Images are `python:3.11-slim`, `eclipse-mosquitto:2.0`, and `influxdb:2.7`; these tags are not immutable digest locks.
@@ -55,9 +48,9 @@ Messages use JSON and QoS 1. See [schema.py](src/aiot_pm/schema.py) for telemetr
 
 The recorded host environment is Python 3.11.13, PyTorch 2.14.0, ONNX 1.23.0, ONNX Runtime 1.30.0, NumPy 2.4.6, pandas 2.3.3, scikit-learn 1.9.1 and paho-mqtt 2.1.0. [requirements-macos-arm64.lock.txt](requirements-macos-arm64.lock.txt) records exact installed packages for macOS ARM64. It is a version snapshot, not a hash-locked or universal lockfile. Linux runtime dependencies resolve separately from [requirements-runtime.txt](requirements-runtime.txt).
 
-Fresh verification and its boundaries are recorded in [docs/reproduction-check.md](docs/reproduction-check.md). Native Linux host training, Windows, WSL2 and physical edge hardware have not been verified. On Windows, use WSL2 with Docker integration and the POSIX commands below; treat that path as untested. Do not force macOS-specific pins such as `uvloop` onto native Windows.
+Earlier reproduction checks are recorded in [docs/reproduction-check.md](docs/reproduction-check.md). Native Linux host training, Windows, WSL2 and physical edge hardware have not been verified. On Windows, use WSL2 with Docker integration and the POSIX commands below; treat that path as untested. Do not force macOS-specific pins such as `uvloop` onto native Windows.
 
-## 3. Clone and install
+## Install
 
 ```bash
 git clone https://github.com/HuynhThanhQuan/aeropulse-aiot-predictive-maintenance.git
@@ -71,16 +64,16 @@ On macOS ARM64, recreate the recorded host dependencies:
 uv pip install --python .venv/bin/python -r requirements-macos-arm64.lock.txt -e '.[train,dev]'
 ```
 
-On another supported Python platform, resolve the declared version ranges instead and record the resulting versions. This is a portability route, not a claim of identical results:
+On other platforms, install from the declared version ranges and save the versions you get. Results may differ from the recorded Mac run:
 
 ```bash
 uv pip install --python .venv/bin/python -e '.[train,dev]'
 uv pip freeze --python .venv/bin/python > results/environment.txt
 ```
 
-`make setup` is the range-based installation shortcut. Activation is optional because all subsequent host commands use `.venv/bin/python` explicitly. Do not install this project as a standalone wheel and assume its external `config/` and `web/` resources are packaged.
+`make setup` is the range-based installation shortcut. Activation is optional because all subsequent host commands use `.venv/bin/python` explicitly. Keep the checkout: the application reads `config/` and `web/` directly from it.
 
-## 4. Obtain the dataset from its publisher
+## Download the data
 
 ```bash
 make download
@@ -94,7 +87,7 @@ The downloader skips an existing complete set of filenames; it does not rehash i
 
 Dataset reference: A. Saxena, K. Goebel, D. Simon, D. Eklund, *Damage Propagation Modeling for Aircraft Engine Run-to-Failure Simulation*, PHM 2008.
 
-## 5. Train, export, and evaluate
+## Train and measure the model
 
 ```bash
 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONUNBUFFERED=1 make train
@@ -106,7 +99,7 @@ The explicit thread limits avoid excessive OpenMP overhead observed on the devel
 
 [config/config.yaml](config/config.yaml) is the source of experiment parameters. Defaults: seed 42, 80 training engines / 20 validation engines, 30-cycle windows, warning label `RUL <= 30`, sensors 2/3/4/7/8/9/11/12/13/14/15/17/20/21. StandardScaler fits training engines only. Inputs are float32 `[batch, 14, 30]`. The 4,185-parameter CNN uses Conv1d/BatchNorm/ReLU, max pooling, another convolution block, global average pooling and a single logit. Training uses weighted BCE, Adam at 0.001, batch size 128, up to 12 epochs and patience 4.
 
-The best epoch and threshold are chosen on validation F1. Static ONNX QDQ quantization calibrates on up to 512 training windows, with unsigned INT8 activations and signed INT8 per-channel weights. Export uses opset 17. Do not tune on official test labels.
+The best epoch and threshold are chosen on validation F1. Static ONNX QDQ quantization calibrates on up to 512 training windows, with unsigned INT8 activations and signed INT8 per-channel weights. Export uses opset 17. The official test labels are reserved for evaluation.
 
 Expected generated outputs (ignored by Git):
 
@@ -124,15 +117,15 @@ Expected generated outputs (ignored by Git):
 
 `collect_measurements.py` also runs a discarded warm-up benchmark. Each model benchmark uses its own process, 20 inference warm-ups, 300 timed batch-1 calls, and CPU ONNX Runtime. Throughput is reciprocal inference latency, not measured end-to-end MQTT throughput. Legacy JSON keys ending `_kb` mean **KiB**, and `_mb` mean **MiB**. RSS is whole-process memory, not model-only RAM or MCU Flash. See [benchmark protocol](docs/benchmark-protocol.md).
 
-Official test RUL is `max_observed_cycle - cycle + RUL_FD001 endpoint`. The measurement script freezes the metadata threshold and evaluates both 10,196 overlapping windows and one final window per engine. These are distinct denominators and must not be pooled. Retraining may change model hashes, threshold and scores across versions or hardware; never overwrite measured results to match a reference value.
+Official test RUL is `max_observed_cycle - cycle + RUL_FD001 endpoint`. The measurement script freezes the metadata threshold and evaluates both 10,196 overlapping windows and one final window per engine. Report the two test scopes separately. Retraining can change the model, threshold and scores, so keep the outputs from your run even when they differ from the reference.
 
-## 6. Configure and start the simulated system
+## Run the demo
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` locally: replace `INFLUXDB_PASSWORD` and `INFLUXDB_TOKEN` placeholders with values used only for this local demo (password at least 8 characters). They initialize a new local InfluxDB instance; they are not GitHub credentials. Do not commit `.env`. Compose reads it automatically, while host Python scripts do not.
+Edit `.env` locally: replace `INFLUXDB_PASSWORD` and `INFLUXDB_TOKEN` placeholders with values used only for this local demo (password at least 8 characters). These values initialize a new local InfluxDB instance. Keep `.env` out of Git. Compose and the dashboard installer read it automatically; export it before running the host evidence collector, as shown below.
 
 | Variable | Default/example | Purpose |
 | --- | --- | --- |
@@ -152,9 +145,17 @@ docker compose ps
 curl -fsS http://localhost:8010/api/health
 ```
 
-Expected health: `{"status":"ok","mqtt_connected":true}`. Open [dashboard](http://localhost:8010) and [InfluxDB](http://localhost:8086). InfluxDB username is `admin`; use your local password, organization `aiot`, bucket `telemetry`. Allow startup retries; `depends_on` orders container startup but does not guarantee application readiness.
+Once live messages arrive, health should return `{"status":"ok","mqtt_connected":true,"mode":"live"}`. Open the [fleet overview](http://localhost:8010/fleet), the [engine 100 console](http://localhost:8010/?engine=FD001-100), or [InfluxDB](http://localhost:8086). InfluxDB username is `admin`; use your local password, organization `aiot`, bucket `telemetry`. Allow startup retries; `depends_on` orders container startup but does not guarantee application readiness.
 
-After at least 30 sensor cycles (~7.5 seconds at the Compose interval 0.25 s), predictions appear. Within a replay, expect high risk → alert → automatic `schedule_maintenance` → acknowledged `maintenance_scheduled=true`. The historical reference crossed at cycle 170; a retrained model is not guaranteed to cross at that exact cycle. Observe the event timeline rather than relying on the final state alone.
+To add the optional eight-chart overview inside InfluxDB, run:
+
+```bash
+INFLUXDB_URL=http://localhost:8086 INFLUXDB_ORG=aiot INFLUXDB_BUCKET=telemetry .venv/bin/python dashboard/create_general_dashboard.py
+```
+
+The installer prints its dashboard URL. Adjust the URL if you changed the InfluxDB host port.
+
+After at least 30 sensor cycles (~7.5 seconds at the Compose interval 0.25 s), predictions appear. Within a replay, expect high risk → alert → automatic `schedule_maintenance` → acknowledged `maintenance_scheduled=true`. The exact alert cycle depends on the trained model. Watch the event timeline to see the command and its acknowledgement.
 
 ```bash
 curl -fsS 'http://localhost:8010/api/snapshot?engine_id=FD001-100'
@@ -191,7 +192,7 @@ docker compose down
 
 This stops the demo and preserves its named database volume. Deleting the volume destroys stored observations; do so only when you deliberately want a new empty demo database. Do not alter or stop unrelated Compose projects.
 
-## 7. Validate and diagnose
+## Checks and troubleshooting
 
 ```bash
 make test
@@ -200,7 +201,7 @@ make lint
 docker compose config --quiet
 ```
 
-The six original tests cover engine split isolation, window labels, rolling preprocessing, schema/topic behavior, and storage conversion. They are not a hardware or full-system test. Validate health, predictions, MQTT feedback and database persistence separately using section 6.
+The tests cover data splitting, preprocessing, messages, storage, fleet queries, offline cache and per-engine freshness. For a running demo, also check health, predictions, command acknowledgements and database writes using the steps above.
 
 | Symptom | Action |
 | --- | --- |
@@ -216,9 +217,9 @@ The six original tests cover engine split isolation, window labels, rolling prep
 | Maintenance already true after replay loops | Expected state retention; reset and inspect timestamped events. |
 | INT8 slower than FP32 | Report actual timings; this very small model can be dominated by runtime overhead. |
 
-## 8. Historical evidence and limitations
+## Reference results and limits
 
-These retained JSON summaries came from the original development project on 12 October 2026; they are reference evidence, not freshly generated values or promised targets. The model hashes are in [dataset-model.json](docs/reference-results/dataset-model.json). Original weights remain local and are not included here.
+The table below records the 12 October 2026 run. The [22 October measurement notes](docs/metrics-20261022.md) cover the later six-engine demo and its measurements. Neither set is a target that a fresh training run must match. The model hashes are in [dataset-model.json](docs/reference-results/dataset-model.json). Original weights remain local and are not included here.
 
 | Scope | FP32 | INT8 |
 | --- | ---: | ---: |
@@ -248,20 +249,8 @@ This is simulated run-to-failure data and a binary early-warning classifier, not
 | `tests/`, `docs/` | checks, runbook, evidence protocol, historical summaries |
 | `data/`, `models/`, `results/`, `submission/` | local generated artifacts; ignored |
 
-## Agent execution checklist
+## Project notes
 
-- [ ] Work in a fresh clone; inspect README, config and dependency files before executing.
-- [ ] Record OS/CPU/RAM, Python/package versions and current Git commit.
-- [ ] Install dependencies; download publisher data and verify archive identity.
-- [ ] Train and confirm both ONNX models, matching metadata and validation windows exist.
-- [ ] Run tests/lint, benchmark and official test evaluation; retain actual outputs.
-- [ ] Configure local-only placeholders, check ports and start the twelve services.
-- [ ] Verify health, live predictions, automatic feedback, manual reset and InfluxDB persistence.
-- [ ] Record tested versus untested environments; preserve failures and limitations honestly.
-- [ ] Stop only this stack when finished. Never publish `.env`, raw data, private coursework or generated personal device evidence without review.
+This repository contains the coursework source with a fresh Git history. Course handouts, report drafts, recordings and private workspace files are excluded. No software license has been added; public access alone does not grant permission to redistribute the code. Dependencies and the dataset retain their own terms.
 
-## Provenance, rights and academic responsibility
-
-This is a scoped source export of the author's AeroPulse coursework project with a fresh Git history. No license has been added: publication does not grant a new software license, and third-party dependencies and dataset terms remain their own. Do not infer redistribution rights from public visibility. No course handouts, report drafts, presentation decks, recorded media or private workspace history are included.
-
-AI assistance: OpenAI Codex supported implementation scaffolding, debugging, testing, evidence tooling and reproduction documentation. Students remain responsible for reviewing the code, rerunning measurements, explaining the system, recording contributions and writing their own report. This repository is not a ready-to-submit student report.
+OpenAI Codex assisted with scaffolding, debugging, tests, measurement scripts and documentation. The project team is responsible for checking the code and results, explaining the design, and acknowledging contributions in the course submission.
