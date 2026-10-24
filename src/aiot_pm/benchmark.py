@@ -36,6 +36,8 @@ def evaluate_model(
     probabilities = sigmoid(logits)
     predicted = probabilities >= threshold
 
+    # Warm-up trước khi đo từng cửa sổ batch=1; không tính thời gian nạp model.
+    # INT8 có overhead QDQ: phải đo trên máy đích, không suy ra nhanh hơn từ file nhỏ.
     warmups = min(20, len(values))
     for index in range(warmups):
         session.run(None, {input_name: values[index : index + 1].astype(np.float32)})
@@ -79,6 +81,8 @@ def benchmark_worker(
 def evaluate_model_isolated(
     model_path: Path, processed_path: Path, threshold: float
 ) -> dict[str, float | int | str]:
+    # Mỗi model chạy ở process riêng để hạn chế ảnh hưởng bộ nhớ của model trước.
+    # RSS vẫn là bộ nhớ toàn process/runtime, không phải riêng tensor trọng số.
     context = mp.get_context("spawn")
     output = context.Queue()
     process = context.Process(
@@ -132,6 +136,8 @@ def main() -> None:
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     threshold = float(metadata["decision_threshold"])
 
+    # Benchmark này dùng validation_windows.npz, không phải official test.
+    # FP32/INT8 dùng chung threshold đã chọn cho INT8 để so ở cùng điểm quyết định.
     rows = [
         evaluate_model_isolated(model_dir / "tiny_cnn_fp32.onnx", processed_path, threshold),
         evaluate_model_isolated(model_dir / "tiny_cnn_int8.onnx", processed_path, threshold),

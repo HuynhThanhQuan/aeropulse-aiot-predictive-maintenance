@@ -30,6 +30,8 @@ class MaintenanceController:
             payload = json.loads(message.payload.decode("utf-8"))
             kind = message.topic.rsplit("/", 1)[-1]
             if kind == "alert" and payload.get("severity") == "high":
+                # Chặn lệnh lặp cho cùng engine trong phiên chạy; trạng thái này ở RAM.
+                # Nhận status maintenance_scheduled=False thì cho phép cảnh báo lại.
                 if engine_id in self.active_alerts:
                     return
                 command = {

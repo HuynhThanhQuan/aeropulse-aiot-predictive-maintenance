@@ -47,6 +47,7 @@ class EngineSimulator:
                 return
             command = json.loads(message.payload.decode("utf-8"))
             action = command.get("action")
+            # Phản hồi lệnh bằng status; đây là cờ mô phỏng, không sửa chữa động cơ thật.
             if action == "schedule_maintenance":
                 self.maintenance_scheduled = True
                 self.publish_status("maintenance_scheduled", command.get("reason", "risk alert"))
@@ -80,6 +81,8 @@ class EngineSimulator:
         self.client.loop_start()
         try:
             while not self.stop_event.is_set():
+                # Replay từng dòng CSV thành telemetry; interval là tốc độ demo,
+                # không phải chu kỳ vật lý hay tham số huấn luyện của mạng.
                 for row in self.rows:
                     if self.stop_event.is_set():
                         break

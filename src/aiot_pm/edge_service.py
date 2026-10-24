@@ -23,6 +23,7 @@ LOGGER = logging.getLogger(__name__)
 class EdgeInferenceService:
     def __init__(self, model_path: Path, metadata_path: Path, cooldown: float) -> None:
         self.metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        # Tạo session một lần để tái sử dụng; không nạp model lại cho mỗi MQTT message.
         self.session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
         self.input_name = self.session.get_inputs()[0].name
         self.window_size = int(self.metadata["window_size"])
@@ -32,6 +33,7 @@ class EdgeInferenceService:
         self.scale = list(self.metadata["scaler_scale"])
         self.model_name = model_path.name
         self.cooldown = cooldown
+        # Mỗi engine có lịch sử riêng; không trộn sensor của các engine vào một cửa sổ.
         self.buffers: dict[str, deque[dict[str, float]]] = defaultdict(
             lambda: deque(maxlen=self.window_size)
         )
@@ -53,6 +55,7 @@ class EdgeInferenceService:
                 raise ValueError("Telemetry is missing one or more model sensor features")
             buffer = self.buffers[engine_id]
             cycle = int(payload["cycle"])
+            # Khi cycle quay lại hoặc lặp, xóa cửa sổ để tránh nối sai chuỗi thời gian.
             if engine_id in self.last_cycle and cycle <= self.last_cycle[engine_id]:
                 buffer.clear()
             self.last_cycle[engine_id] = cycle
@@ -61,9 +64,12 @@ class EdgeInferenceService:
                 return
 
             values = normalize_window(list(buffer), self.feature_names, self.mean, self.scale)
+            # Chỉ đo session.run; latency này chưa gồm MQTT, chuẩn hóa, DB và giao diện.
             started = time.perf_counter_ns()
             logit = float(self.session.run(None, {self.input_name: values})[0].reshape(-1)[0])
             latency_ms = (time.perf_counter_ns() - started) / 1_000_000
+            # Sigmoid chuyển logit thành score [0,1]; chặn logit để tránh overflow exp.
+            # Đây là score phân loại RUL <= warning_rul, chưa bảo đảm xác suất hiệu chuẩn.
             probability = 1.0 / (1.0 + math.exp(-max(min(logit, 30), -30)))
             risk_level = self.risk_level(probability)
             prediction = Prediction(
@@ -99,6 +105,8 @@ class EdgeInferenceService:
     def risk_level(self, probability: float) -> str:
         if probability >= self.threshold:
             return "high"
+        # watch là vùng đệm hiển thị; chỉ high kích hoạt alert. Cooldown chỉ giãn
+        # các alert lặp lại, không thay đổi score hoặc predicted_class.
         if probability >= max(0.25, self.threshold * 0.70):
             return "watch"
         return "normal"

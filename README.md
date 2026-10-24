@@ -6,7 +6,7 @@ The demo runs locally with Docker, MQTT and InfluxDB. It uses recorded data rath
 
 To run it yourself, install the Python dependencies, download the dataset, train the model, then start the containers. This repository contains the source and selected measurement summaries. Datasets, trained weights, credentials and runtime caches stay local.
 
-For the presentation, start with the [Vietnamese walkthrough](docs/defense-guide-vi.md), [measurement notes](docs/metrics-20261022.md), and [defense questions](docs/defense-questions-vi.md). They describe the checked model at threshold 0.64. If you retrain, use the threshold and results from your own run.
+Start with the [source and ONNX guide](docs/source-guide-vi.md), [demo runbook](docs/demo-runbook.md), and [measurement notes](docs/metrics-20261022.md). The recorded model uses threshold 0.64. If you retrain, use the threshold and results from your own run.
 
 **Start here:** [Architecture](#architecture) · [Quickstart](#quickstart) · [Benchmark results](#benchmark-results) · [AI Disclosure](#ai-disclosure)
 

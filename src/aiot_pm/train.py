@@ -25,6 +25,8 @@ from .config import load_config, project_path
 from .data import PreparedData, prepare_data
 from .model import TinyConvNet
 
+# Luồng offline: train PyTorch → export ONNX FP32 → calibration INT8 → chọn ngưỡng.
+# Hướng dẫn các điểm tune: docs/source-guide-vi.md.
 
 class ArrayCalibrationReader(CalibrationDataReader):
     def __init__(self, values: np.ndarray, input_name: str = "sensor_window") -> None:
@@ -36,6 +38,8 @@ class ArrayCalibrationReader(CalibrationDataReader):
             value = next(self.iterator)
         except StopIteration:
             return None
+        # Calibration chạy forward trên cửa sổ train đã chuẩn hóa, không cập nhật trọng số.
+        # Thêm trục batch: [14, 30] → [1, 14, 30]; tên input phải khớp graph ONNX.
         return {self.input_name: value[np.newaxis, ...].astype(np.float32)}
 
 
@@ -56,6 +60,10 @@ def predict_torch(model: nn.Module, values: np.ndarray, batch_size: int) -> np.n
 
 
 def choose_threshold(labels: np.ndarray, probabilities: np.ndarray) -> float:
+    # Grid search 81 ngưỡng 0.10..0.90, bước 0.01, tối đa F1 trên VALIDATION.
+    # Nếu hòa F1, argmax chọn ngưỡng thấp nhất. Không dùng official test để chọn ngưỡng.
+    # Muốn ưu tiên recall: đổi mục tiêu sang F2 hoặc recall với ràng buộc precision,
+    # rồi đánh giá lại; đây là tune quyết định, không phải học lại trọng số ONNX.
     candidates = np.linspace(0.10, 0.90, 81)
     scores = [f1_score(labels, probabilities >= threshold) for threshold in candidates]
     return float(candidates[int(np.argmax(scores))])
@@ -79,6 +87,8 @@ def train_model(data: PreparedData, config: dict) -> tuple[TinyConvNet, list[dic
     model = TinyConvNet(len(data.feature_names))
     positives = max(float(data.y_train.sum()), 1.0)
     negatives = max(float(len(data.y_train) - data.y_train.sum()), 1.0)
+    # Lớp cảnh báo ít hơn: tăng trọng số loss của mẫu dương theo tỷ lệ âm/dương.
+    # Loss nhận LOGIT; sigmoid chỉ dùng khi đánh giá/suy luận, không áp dụng trước loss.
     criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(negatives / positives))
     optimizer = torch.optim.Adam(model.parameters(), lr=settings["learning_rate"])
     train_dataset = TensorDataset(torch.from_numpy(data.x_train), torch.from_numpy(data.y_train))
@@ -86,6 +96,7 @@ def train_model(data: PreparedData, config: dict) -> tuple[TinyConvNet, list[dic
         train_dataset, batch_size=settings["batch_size"], shuffle=True, drop_last=False
     )
 
+    # Chọn checkpoint bằng validation F1, không dùng training loss hay test score.
     best_state = copy.deepcopy(model.state_dict())
     best_f1 = -1.0
     stale_epochs = 0
@@ -142,6 +153,9 @@ def export_models(model: TinyConvNet, data: PreparedData, config: dict) -> tuple
         staged_fp32 = Path(temp_dir) / "tiny_cnn_fp32.onnx"
         staged_int8 = Path(temp_dir) / "tiny_cnn_int8.onnx"
         preprocessed_path = Path(temp_dir) / "tiny_cnn_fp32_preprocessed.onnx"
+        # Export chỉ đổi cách biểu diễn graph + trọng số đã học; không huấn luyện lại.
+        # Batch linh hoạt, nhưng số sensor và độ dài cửa sổ vẫn cố định lúc export.
+        # opset=17 là phiên bản tập toán tử; không phải mức nén hay tham số độ chính xác.
         torch.onnx.export(
             model,
             example,
@@ -152,9 +166,18 @@ def export_models(model: TinyConvNet, data: PreparedData, config: dict) -> tuple
             opset_version=17,
             dynamo=False,
         )
+        # Suy luận shape và tối ưu graph trước quantization (ví dụ fusion nếu hỗ trợ).
         quant_pre_process(staged_fp32, preprocessed_path)
+        # Lấy tối đa calibration_samples cửa sổ TRAIN rải đều theo chỉ số.
+        # Đây chưa phải lấy mẫu phân tầng theo engine/rủi ro; độ đại diện cần kiểm tra.
+        # Calibration đo dải activation để tính scale/zero-point, không cần nhãn.
         count = min(config["training"]["calibration_samples"], len(data.x_train))
         indexes = np.linspace(0, len(data.x_train) - 1, count, dtype=int)
+        # PTQ tĩnh: lượng tử hóa sau train, không phải quantization-aware training (QAT).
+        # QDQ chèn QuantizeLinear/DequantizeLinear; x ≈ scale * (q - zero_point).
+        # Activation uint8, weight int8; per_channel dùng scale riêng từng kênh weight.
+        # Input/output graph vẫn float32; không tự ép sensor_window sang int8.
+        # Các lựa chọn QDQ/dtype/per_channel đang nằm trong code, chưa có CLI/config.
         quantize_static(
             model_input=str(preprocessed_path),
             model_output=str(staged_int8),
@@ -170,6 +193,7 @@ def export_models(model: TinyConvNet, data: PreparedData, config: dict) -> tuple
 
 
 def onnx_probabilities(path: Path, values: np.ndarray) -> np.ndarray:
+    # ONNX Runtime thực thi graph trên CPU; đầu ra là logit, cần sigmoid để lấy score.
     session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
     logits = session.run(None, {"sensor_window": values.astype(np.float32)})[0].reshape(-1)
     return 1.0 / (1.0 + np.exp(-logits))
@@ -200,9 +224,13 @@ def main() -> None:
     torch.save(model.state_dict(), model_dir / "tiny_cnn_state.pt")
     fp32_path, int8_path = export_models(model, data, config)
 
+    # Lượng tử hóa có thể làm lệch score: chọn lại ngưỡng trên bản INT8 cuối cùng.
+    # Ngưỡng là kết quả validation, không hard-code 0.64 hay chỉnh theo engine demo.
     int8_probabilities = onnx_probabilities(int8_path, data.x_validation)
     threshold = choose_threshold(data.y_validation, int8_probabilities)
     metrics = classification_metrics(data.y_validation, int8_probabilities, threshold)
+    # Model + metadata là một bộ: thứ tự sensor, scaler và threshold phải đi cùng nhau.
+    # main() ghi đè artifact ở các thư mục config; thử tune trong bản sao riêng.
     metadata = {
         "project": "C-MAPSS FD001 predictive maintenance",
         "model_type": "1D-CNN ONNX static INT8 QDQ",

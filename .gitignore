@@ -28,3 +28,17 @@ submission/
 verification/
 backups/
 *.sqlite*
+
+# Local AI sessions, chat exports and personal preparation notes
+.codex/
+.claude/
+.chatgpt/
+chat-history/
+chat-exports/
+transcripts/
+rollout-*.jsonl
+rollout-*.jsonl.zst
+codex-clipboard-*
+docs/defense-guide-vi.md
+docs/defense-questions-vi.md
+docs/report-evidence-checklist.md

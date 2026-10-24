@@ -32,6 +32,8 @@ def load_cmapss(path: str | Path) -> pd.DataFrame:
         raise ValueError(f"Expected {len(COLUMNS)} C-MAPSS columns, got {frame.shape[1]}")
     if frame.empty:
         raise ValueError("C-MAPSS data file is empty")
+    # Chỉ đúng cho quỹ đạo chạy đến hỏng (train). Official test bị cắt sớm:
+    # RUL thật phải cộng đáp án RUL_FD001.txt, không chỉ lấy max(cycle) - cycle.
     frame["rul"] = frame.groupby("unit_id")["cycle"].transform("max") - frame["cycle"]
     return frame
 
@@ -39,6 +41,7 @@ def load_cmapss(path: str | Path) -> pd.DataFrame:
 def split_engine_ids(
     frame: pd.DataFrame, validation_fraction: float, seed: int
 ) -> tuple[list[int], list[int]]:
+    # Tách theo ENGINE trước khi tạo cửa sổ để không rò rỉ các cửa sổ chồng lấp.
     ids = np.array(sorted(frame["unit_id"].unique()), dtype=np.int64)
     rng = np.random.default_rng(seed)
     rng.shuffle(ids)
@@ -62,6 +65,8 @@ def build_windows(
         values = engine[feature_names].to_numpy(dtype=np.float32)
         rul = engine["rul"].to_numpy(dtype=np.int64)
         for end in range(window_size - 1, len(engine)):
+            # Mỗi cửa sổ chỉ thuộc một engine; transpose sang [sensor, cycle].
+            # Nhãn lấy RUL ở CUỐI cửa sổ: 1 nghĩa là còn <= warning_rul chu kỳ.
             windows.append(values[end - window_size + 1 : end + 1].T)
             labels.append(int(rul[end] <= warning_rul))
     if not windows:
@@ -87,6 +92,7 @@ def prepare_data(
     train_frame = frame[frame["unit_id"].isin(train_ids)].copy()
     validation_frame = frame[frame["unit_id"].isin(validation_ids)].copy()
 
+    # Chỉ fit mean/std trên train; validation và lúc chạy dùng lại đúng scaler này.
     scaler = StandardScaler()
     train_frame[feature_names] = scaler.fit_transform(train_frame[feature_names]).astype(np.float32)
     validation_frame[feature_names] = scaler.transform(validation_frame[feature_names]).astype(

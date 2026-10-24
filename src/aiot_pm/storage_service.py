@@ -21,6 +21,8 @@ class InfluxStorageService:
         self.org = org
         self.bucket = bucket
         self.influx = InfluxDBClient(url=url, token=token, org=org)
+        # Ghi theo lô để giảm request; dashboard đọc DB có thể trễ so với MQTT trực tiếp.
+        # batch_size tính theo điểm dữ liệu; flush_interval tính bằng millisecond.
         self.writer = self.influx.write_api(
             write_options=WriteOptions(batch_size=100, flush_interval=1000)
         )
