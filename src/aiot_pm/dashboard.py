@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from .config import ROOT, load_config
 from .dashboard_cache import DashboardCache, resolve_cache_path
+from .engine_origin import dataset_split
 from .fleet import FleetDataError, FleetService
 from .mqtt_utils import create_client
 from .schema import engine_topic, topic_engine_id, utc_now
@@ -302,7 +303,10 @@ def fleet_summary() -> dict[str, Any]:
 
 @app.get("/api/fleet/engines")
 def fleet_engines() -> dict[str, Any]:
-    return _fleet_call(lambda: fleet_service().engines())
+    result = _fleet_call(lambda: fleet_service().engines())
+    for engine in result["engines"] + result.get("ranking", []):
+        engine["dataset_split"] = dataset_split(engine["engine_id"])
+    return result
 
 
 @app.get("/api/fleet/risk-distribution")
@@ -322,7 +326,7 @@ def fleet_engine(engine_id: str) -> dict[str, Any]:
     engine = _fleet_call(lambda: fleet_service().engine(engine_id))
     if engine is None:
         raise HTTPException(status_code=404, detail="Engine is outside the lookback window")
-    return engine
+    return {**engine, "dataset_split": dataset_split(engine_id)}
 
 
 @app.get("/api/health")
@@ -338,7 +342,10 @@ def health() -> dict[str, Any]:
 
 @app.get("/api/snapshot")
 def snapshot(engine_id: str | None = Query(default=None)) -> dict[str, Any]:
-    return STATE.snapshot(engine_id)
+    result = STATE.snapshot(engine_id)
+    result["engine_splits"] = {key: dataset_split(key) for key in result["engines"]}
+    result["dataset_split"] = dataset_split(result["engine_id"])
+    return result
 
 
 @app.post("/api/command")

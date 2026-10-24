@@ -18,12 +18,18 @@ LOGGER = logging.getLogger(__name__)
 
 
 class EngineSimulator:
-    def __init__(self, dataset_path: Path, engine_number: int, interval: float, loop: bool) -> None:
+    def __init__(
+        self, dataset_path: Path, engine_number: int, interval: float, loop: bool,
+        dataset_split: str = "train",
+    ) -> None:
+        if dataset_split not in {"train", "test"}:
+            raise ValueError("dataset_split must be train or test")
         rows = np.loadtxt(dataset_path, dtype=np.float64)
         self.rows = rows[rows[:, 0].astype(int) == engine_number]
         if len(self.rows) == 0:
             raise ValueError(f"Engine {engine_number} was not found in {dataset_path.name}")
-        self.engine_id = f"FD001-{engine_number:03d}"
+        prefix = "FD001-TEST" if dataset_split == "test" else "FD001"
+        self.engine_id = f"{prefix}-{engine_number:03d}"
         self.interval = interval
         self.loop = loop
         self.stop_event = threading.Event()
@@ -107,16 +113,18 @@ class EngineSimulator:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Replay one C-MAPSS engine over MQTT")
     parser.add_argument("--engine", type=int, default=None, help="FD001 engine number (1-100)")
+    parser.add_argument("--split", choices=["train", "test"], default="train")
     parser.add_argument("--interval", type=float, default=None, help="Seconds between cycles")
     parser.add_argument("--once", action="store_true", help="Stop after one trajectory")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = load_config()
-    dataset_path = project_path(config["project"]["data_dir"]) / "train_FD001.txt"
+    dataset_path = project_path(config["project"]["data_dir"]) / f"{args.split}_FD001.txt"
     if not dataset_path.exists():
         raise SystemExit("Dataset not found. Run `aiot-download` first.")
     simulator = EngineSimulator(
         dataset_path,
+        dataset_split=args.split,
         engine_number=args.engine or config["simulator"]["engine_id"],
         interval=args.interval or config["simulator"]["interval_seconds"],
         loop=config["simulator"]["loop"] and not args.once,

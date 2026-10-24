@@ -1,6 +1,6 @@
 # AeroPulse
 
-AeroPulse is a predictive-maintenance demo built for our AIoT final project. Six simulated turbofan engines replay NASA C-MAPSS FD001 sensor data. A small 1D-CNN estimates failure risk, and the dashboard lets you follow each engine as its condition changes. When risk crosses the model's threshold, a controller sends a maintenance command back to the simulator.
+AeroPulse is a predictive-maintenance demo built for our AIoT final project. Twelve simulated turbofan engines replay NASA C-MAPSS FD001 sensor data. A small 1D-CNN estimates failure risk, and the dashboard lets you follow each engine as its condition changes. When risk crosses the model's threshold, a controller sends a maintenance command back to the simulator.
 
 The demo runs locally with Docker, MQTT and InfluxDB. It uses recorded data rather than physical sensors, and a maintenance command changes the simulator's state; it does not simulate a repair.
 
@@ -12,7 +12,7 @@ For the presentation, start with the [Vietnamese walkthrough](docs/defense-guide
 
 ```mermaid
 flowchart LR
-    Data["NASA FD001 replay data<br/>Engines 095–100"] --> Sim["6 engine simulators"]
+    Data["NASA FD001 replay data<br/>Development engines 095–100 + test engines 001–006"] --> Sim["12 engine simulators"]
     Sim -->|telemetry| Broker["Mosquitto<br/>MQTT broker"]
     Sim -->|status: command acknowledgement| Broker
     Broker -->|command: schedule or reset maintenance| Sim
@@ -32,7 +32,7 @@ flowchart LR
 
     Broker -->|telemetry, prediction, alert, status| Storage["Storage service"]
     Storage --> DB[("InfluxDB")]
-    DB -->|Flux queries| Fleet["Fleet dashboard<br/>Overview of all 6 engines"]
+    DB -->|Flux queries| Fleet["Fleet dashboard<br/>Overview of all 12 engines"]
 
     classDef broker fill:#fff3cd,stroke:#9a6700,stroke-width:2px,color:#24292f
     classDef inference fill:#eaf2ff,stroke:#0969da,color:#24292f
@@ -47,7 +47,7 @@ Read the diagram from the simulators through Mosquitto to the consumers. Edge ke
 The two dashboards read different sources: the engine console follows MQTT messages and keeps a local SQLite cache, while the fleet overview reads stored predictions from InfluxDB using Flux. Arrows show message or data flow; they do not represent separate containers for every box.
 
 
-Docker Compose starts twelve services: `mosquitto`, `influxdb`, `edge`, `storage`, `dashboard`, `controller`, `simulator` (100), and `simulator_095` through `simulator_099`. Training runs on the host; runtime containers do not install PyTorch. The engine console subscribes to MQTT and persists a bounded SQLite cache. The fleet dashboard queries historical InfluxDB predictions through server-side Flux.
+Docker Compose starts eighteen services: `mosquitto`, `influxdb`, `edge`, `storage`, `dashboard`, `controller`, `simulator` (100), `simulator_095` through `simulator_099`, and `simulator_test_001` through `simulator_test_006`. Training runs on the host; runtime containers do not install PyTorch. The engine console subscribes to MQTT and persists a bounded SQLite cache. The fleet dashboard queries historical InfluxDB predictions through server-side Flux.
 
 | Topic suffix under `aiot/engine/{id}/` | Producer | Consumers |
 | --- | --- | --- |
@@ -58,6 +58,20 @@ Docker Compose starts twelve services: `mosquitto`, `influxdb`, `edge`, `storage
 | `status` | simulator | controller, storage, dashboard |
 
 The services exchange JSON messages over MQTT with QoS 1. See [schema.py](src/aiot_pm/schema.py) for telemetry and prediction fields. The replay IDs are `FD001-095` through `FD001-100`. `schedule_maintenance` changes a Boolean state; it does not repair an engine or actuate hardware. `reset_maintenance` clears that state. When a replay starts over, inference clears its rolling window. The maintenance flag can remain set until you reset it.
+
+### Which dataset does each engine use?
+
+Both dashboards show a Train, Validation or Test label. Train/Validation membership comes from the deployed model's metadata, so labels follow a fresh training split rather than a hard-coded list. Missing membership is shown as Unknown.
+
+| Replay IDs | Dataset | Role in the recorded model |
+| --- | --- | --- |
+| FD001-095, 096, 097, 099 | `train_FD001.txt` | Train |
+| FD001-098, 100 | `train_FD001.txt` | Validation |
+| FD001-TEST-001 through 006 | `test_FD001.txt` | Test |
+
+The six test engines are the first six IDs, selected without looking at prediction quality. Their distinct MQTT IDs keep their buffers, commands and stored history separate from training-file engines with the same numbers. To replay another test engine manually, use `python -m aiot_pm.simulator --split test --engine 7` in the configured environment.
+
+Test trajectories end before failure. Engine TEST-001 has only 31 observed cycles; after each replay restart, its console waits for a new 30-cycle window before predicting again. The simulator sends sensor data only; it does not send ground-truth RUL to inference. Keep the model and threshold fixed while viewing test replay. This live demo is not a new accuracy measurement; use the official evaluation script for test metrics across all 100 test engines.
 
 ## Before you start
 

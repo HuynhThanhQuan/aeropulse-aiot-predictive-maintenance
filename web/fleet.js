@@ -24,8 +24,7 @@ const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character
 }[character]));
 
 function shortId(engineId) {
-  const match = /^FD001-(\d+)$/.exec(engineId || "");
-  return match ? match[1] : engineId;
+  return String(engineId || "").replace(/^FD001-/, "");
 }
 
 function healthLabel(health) {
@@ -159,6 +158,7 @@ function renderGrid() {
     const selected = state.selected === engine.engine_id ? " is-selected" : "";
     return `<button class="tile${selected}" type="button" data-engine="${escapeHtml(engine.engine_id)}">
       <strong>${escapeHtml(shortId(engine.engine_id))}</strong>
+      <span class="dataset-split">${escapeHtml(engine.dataset_split || "Unknown")}</span>
       <span class="pill pill-${pill}">${escapeHtml(label)}</span>
       <small>${engine.failure_percent.toFixed(1)}%</small>
     </button>`;
@@ -174,6 +174,7 @@ function renderDetail(engine) {
   }
   const rows = [
     ["Engine", engine.engine_id],
+    ["Dataset split", engine.dataset_split || "Unknown"],
     ["Health", healthLabel(engine.health)],
     ["Connectivity", engine.connectivity],
     ["Failure probability", `${engine.failure_percent.toFixed(1)}%`],

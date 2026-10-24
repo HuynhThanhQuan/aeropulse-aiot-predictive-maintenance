@@ -67,11 +67,12 @@ function drawLineChart(canvas, points, options = {}) {
   context.textAlign = "start";
 }
 
-function updateEngineOptions(engines, selected) {
+function updateEngineOptions(engines, selected, splits) {
   const select = byId("engine-select");
   const existing = Array.from(select.options).map((option) => option.value);
-  if (JSON.stringify(existing) !== JSON.stringify(engines)) {
-    select.innerHTML = engines.map((engine) => `<option value="${escapeHtml(engine)}">${escapeHtml(engine)}</option>`).join("");
+  if (JSON.stringify(existing) !== JSON.stringify(engines) || select.dataset.splits !== JSON.stringify(splits)) {
+    select.dataset.splits = JSON.stringify(splits);
+    select.innerHTML = engines.map((engine) => `<option value="${escapeHtml(engine)}">${escapeHtml(engine)} · ${escapeHtml(splits[engine] || "Unknown")}</option>`).join("");
   }
   if (selected) select.value = selected;
 }
@@ -206,7 +207,7 @@ function render(snapshot) {
   const selected = state.engineId && (snapshot.engines || []).includes(state.engineId)
     ? state.engineId
     : snapshot.engine_id;
-  updateEngineOptions(snapshot.engines, selected);
+  updateEngineOptions(snapshot.engines, selected, snapshot.engine_splits || {});
   state.engineId = selected;
 
   const telemetry = snapshot.telemetry || [];
@@ -217,7 +218,9 @@ function render(snapshot) {
   updateSensorOptions(telemetry);
 
   byId("cycle-value").textContent = latestTelemetry?.cycle ?? "--";
-  byId("engine-value").textContent = state.engineId || "Waiting for telemetry";
+  byId("engine-value").textContent = state.engineId
+    ? `${state.engineId} · ${snapshot.dataset_split || "Unknown"}`
+    : "Waiting for telemetry";
   byId("risk-value").textContent = latestPrediction ? latestPrediction.risk_level.toUpperCase() : "--";
   byId("probability-value").textContent = latestPrediction ? `${formatPercent(latestPrediction.failure_probability)} probability` : "No prediction yet";
   byId("latency-value").textContent = latestPrediction ? `${latestPrediction.latency_ms.toFixed(2)} ms` : "--";

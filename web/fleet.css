@@ -63,3 +63,5 @@
   .kpi-row, .split, .donut-layout, .detail-grid { grid-template-columns: 1fr; }
   .histogram { height: 180px; }
 }
+
+.dataset-split { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }

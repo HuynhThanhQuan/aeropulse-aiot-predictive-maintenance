@@ -102,5 +102,29 @@ services:
     <<: *simulator-service
     command: ["python", "-m", "aiot_pm.simulator", "--engine", "99", "--interval", "0.25"]
 
+  simulator_test_001:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--split", "test", "--engine", "1", "--interval", "0.25"]
+
+  simulator_test_002:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--split", "test", "--engine", "2", "--interval", "0.25"]
+
+  simulator_test_003:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--split", "test", "--engine", "3", "--interval", "0.25"]
+
+  simulator_test_004:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--split", "test", "--engine", "4", "--interval", "0.25"]
+
+  simulator_test_005:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--split", "test", "--engine", "5", "--interval", "0.25"]
+
+  simulator_test_006:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--split", "test", "--engine", "6", "--interval", "0.25"]
+
 volumes:
   influxdb-data:
