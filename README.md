@@ -288,4 +288,12 @@ This is simulated run-to-failure data and a binary early-warning classifier, not
 
 This repository contains the coursework source with a fresh Git history. Course handouts, report drafts, recordings and private workspace files are excluded. No software license has been added; public access alone does not grant permission to redistribute the code. Dependencies and the dataset retain their own terms.
 
-OpenAI Codex assisted with scaffolding, debugging, tests, measurement scripts and documentation. The project team is responsible for checking the code and results, explaining the design, and acknowledging contributions in the course submission.
+## AI Disclaimer
+
+This project was developed with assistance from OpenAI Codex. AI assistance included code scaffolding and implementation, debugging, test development, measurement scripts, dashboard updates, documentation, and architecture diagrams.
+
+AI-generated code and explanations can contain errors. The project team remains responsible for reviewing the implementation, verifying results against saved artifacts and reproducible runs, explaining design decisions, and following the course's rules on AI use and attribution. This disclosure does not imply that every generated statement or code path has been independently verified.
+
+Performance claims should be supported by the linked measurements and their stated evaluation scope. AI-written explanations are not experimental evidence. The CNN used for inference is trained on NASA C-MAPSS sensor data; the deployed prediction pipeline does not call a generative AI service.
+
+AeroPulse is a coursework prototype using simulated engine data. Its predictions and maintenance commands are for demonstration and evaluation, not operational aircraft maintenance or safety decisions.
