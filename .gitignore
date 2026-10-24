@@ -9,12 +9,14 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+data/dashboard/
 models/*
 !models/.gitkeep
 results/*
 !results/.gitkeep
 
 
+dashboard/backups/
 .ruff_cache/
 *.egg-info/
 submission/
@@ -22,3 +24,7 @@ submission/
 *.part
 .env.*
 !.env.example
+
+verification/
+backups/
+*.sqlite*

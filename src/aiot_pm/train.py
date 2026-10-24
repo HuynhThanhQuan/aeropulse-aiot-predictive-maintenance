@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import json
 import random
+import shutil
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -133,34 +135,37 @@ def export_models(model: TinyConvNet, data: PreparedData, config: dict) -> tuple
     model_dir.mkdir(parents=True, exist_ok=True)
     fp32_path = model_dir / "tiny_cnn_fp32.onnx"
     int8_path = model_dir / "tiny_cnn_int8.onnx"
-    preprocessed_path = model_dir / "tiny_cnn_fp32_preprocessed.onnx"
     example = torch.from_numpy(data.x_train[:1])
-    torch.onnx.export(
-        model,
-        example,
-        fp32_path,
-        input_names=["sensor_window"],
-        output_names=["failure_logit"],
-        dynamic_axes={"sensor_window": {0: "batch"}, "failure_logit": {0: "batch"}},
-        opset_version=17,
-        dynamo=False,
-    )
-
-    quant_pre_process(fp32_path, preprocessed_path)
-    try:
+    # ONNX Runtime shape inference opens paths with a non-Unicode API on Windows.
+    # Stage export under an ASCII temp directory, then copy the artifacts back.
+    with tempfile.TemporaryDirectory(prefix="aiot-onnx-") as temp_dir:
+        staged_fp32 = Path(temp_dir) / "tiny_cnn_fp32.onnx"
+        staged_int8 = Path(temp_dir) / "tiny_cnn_int8.onnx"
+        preprocessed_path = Path(temp_dir) / "tiny_cnn_fp32_preprocessed.onnx"
+        torch.onnx.export(
+            model,
+            example,
+            staged_fp32,
+            input_names=["sensor_window"],
+            output_names=["failure_logit"],
+            dynamic_axes={"sensor_window": {0: "batch"}, "failure_logit": {0: "batch"}},
+            opset_version=17,
+            dynamo=False,
+        )
+        quant_pre_process(staged_fp32, preprocessed_path)
         count = min(config["training"]["calibration_samples"], len(data.x_train))
         indexes = np.linspace(0, len(data.x_train) - 1, count, dtype=int)
         quantize_static(
             model_input=str(preprocessed_path),
-            model_output=str(int8_path),
+            model_output=str(staged_int8),
             calibration_data_reader=ArrayCalibrationReader(data.x_train[indexes]),
             quant_format=QuantFormat.QDQ,
             activation_type=QuantType.QUInt8,
             weight_type=QuantType.QInt8,
             per_channel=True,
         )
-    finally:
-        preprocessed_path.unlink(missing_ok=True)
+        shutil.copy2(staged_fp32, fp32_path)
+        shutil.copy2(staged_int8, int8_path)
     return fp32_path, int8_path
 
 

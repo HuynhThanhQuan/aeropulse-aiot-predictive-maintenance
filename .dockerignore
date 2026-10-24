@@ -8,3 +8,6 @@
 !src/aiot_pm/*.py
 !web/
 !web/**
+!dashboard/
+!dashboard/queries/
+!dashboard/queries/**

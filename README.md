@@ -4,6 +4,18 @@ AeroPulse is an AIoT final-coursework software prototype. It replays NASA C-MAPS
 
 **For an AI agent on a new computer:** follow the numbered procedure below from the repository root. Download data and train before starting the containers. No trained weights, datasets, course handouts, student reports, credentials, or original workspace history are distributed. Do not infer successful reproduction from this README's historical scores: generate and retain your own outputs.
 
+## October 22 integration
+
+The source now includes six replay engines, [Fleet dashboard](http://localhost:8010/fleet), per-engine freshness, SQLite offline cache and an InfluxDB general dashboard. See the [Vietnamese walkthrough](docs/defense-guide-vi.md), [measurement notes](docs/metrics-20261022.md), and [defense questions](docs/defense-questions-vi.md). These notes describe the original verified model at threshold 0.64; a fresh training run must use its own metadata and measurements. Model weights remain excluded.
+
+Once Compose is running and `.env` is configured, install the optional InfluxDB dashboard:
+
+```bash
+INFLUXDB_URL=http://localhost:8086 INFLUXDB_ORG=aiot INFLUXDB_BUCKET=telemetry .venv/bin/python dashboard/create_general_dashboard.py
+```
+
+The script prints the dashboard URL. Fleet is available at `/fleet`, the engine console at `/?engine=FD001-100`. Ports bind to localhost. Do not copy another person's `.env`, cache, datasets or generated artifacts into this public repository.
+
 ## 1. Architecture and scope
 
 ```mermaid
@@ -21,7 +33,7 @@ flowchart LR
     Simulator -->|acknowledged status| MQTT
 ```
 
-Seven Compose services: `mosquitto`, `influxdb`, `edge`, `storage`, `dashboard`, `controller`, `simulator`. Training runs on the host; runtime containers do not install PyTorch. The dashboard subscribes to MQTT and keeps bounded in-memory buffers; it does **not** query historical InfluxDB records.
+Twelve Compose services (including six simulator instances): `mosquitto`, `influxdb`, `edge`, `storage`, `dashboard`, `controller`, `simulator` (100), and `simulator_095` through `simulator_099`. Training runs on the host; runtime containers do not install PyTorch. The engine console subscribes to MQTT and persists a bounded SQLite cache. The fleet dashboard queries historical InfluxDB predictions through server-side Flux.
 
 | Topic suffix under `aiot/engine/{id}/` | Producer | Consumers |
 | --- | --- | --- |
@@ -31,7 +43,7 @@ Seven Compose services: `mosquitto`, `influxdb`, `edge`, `storage`, `dashboard`,
 | `command` | controller or dashboard | simulator, dashboard |
 | `status` | simulator | controller, storage, dashboard |
 
-Messages use JSON and QoS 1. See [schema.py](src/aiot_pm/schema.py) for telemetry and prediction fields. The replay ID is `FD001-100`. `schedule_maintenance` changes a Boolean state; it does not repair an engine or actuate hardware. `reset_maintenance` clears that state. Replay loops and resets rolling inference buffers when cycle numbers restart; maintenance state may stay true across loops.
+Messages use JSON and QoS 1. See [schema.py](src/aiot_pm/schema.py) for telemetry and prediction fields. The replay IDs are `FD001-095` through `FD001-100`. `schedule_maintenance` changes a Boolean state; it does not repair an engine or actuate hardware. `reset_maintenance` clears that state. Replay loops and resets rolling inference buffers when cycle numbers restart; maintenance state may stay true across loops.
 
 ## 2. Prerequisites and compatibility
 
@@ -200,7 +212,7 @@ The six original tests cover engine split isolation, window labels, rolling prep
 | Port already allocated | Change host ports in `.env`; update curl URLs and `INFLUXDB_URL`. Container service ports stay fixed. |
 | MQTT connected but no predictions | Wait 30 cycles; check edge/simulator logs and model mount. |
 | InfluxDB unauthorized | Match local token to the one used to initialize that volume. Changing `.env` does not reset an existing database. |
-| Empty dashboard after restart | It has in-memory history; wait for replay. InfluxDB history is separate. |
+| Empty dashboard after restart | The engine console loads its SQLite cache; wait for live replay. Fleet requires InfluxDB. |
 | Maintenance already true after replay loops | Expected state retention; reset and inspect timestamped events. |
 | INT8 slower than FP32 | Report actual timings; this very small model can be dominated by runtime overhead. |
 
@@ -243,7 +255,7 @@ This is simulated run-to-failure data and a binary early-warning classifier, not
 - [ ] Install dependencies; download publisher data and verify archive identity.
 - [ ] Train and confirm both ONNX models, matching metadata and validation windows exist.
 - [ ] Run tests/lint, benchmark and official test evaluation; retain actual outputs.
-- [ ] Configure local-only placeholders, check ports and start the seven services.
+- [ ] Configure local-only placeholders, check ports and start the twelve services.
 - [ ] Verify health, live predictions, automatic feedback, manual reset and InfluxDB persistence.
 - [ ] Record tested versus untested environments; preserve failures and limitations honestly.
 - [ ] Stop only this stack when finished. Never publish `.env`, raw data, private coursework or generated personal device evidence without review.

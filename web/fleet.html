@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AeroPulse | General Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/fleet.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-block">
+        <span class="brand-mark" aria-hidden="true">AP</span>
+        <div>
+          <h1>AeroPulse</h1>
+          <p>Fleet monitoring</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a class="nav-link" href="/">Engine console</a>
+        <span id="refresh-state" class="connection mode-live">
+          <span class="status-dot"></span>
+          <span class="connection-copy">
+            <strong id="refresh-label">LIVE</strong>
+            <span id="refresh-detail">waiting for fleet data</span>
+          </span>
+        </span>
+      </div>
+    </header>
+
+    <p id="server-error" class="server-error" hidden>Cannot reach fleet data</p>
+
+    <main class="fleet">
+      <div class="page-head">
+        <div>
+          <h2>General Dashboard</h2>
+          <p>AeroPulse · Fleet Monitoring</p>
+        </div>
+        <span class="target-pill">Fleet view</span>
+      </div>
+
+      <section class="kpi-row" aria-label="Fleet overview">
+        <article class="kpi">
+          <span>Reporting</span>
+          <strong id="kpi-reporting" class="tone-reporting">--</strong>
+          <small id="kpi-reporting-detail">--</small>
+        </article>
+        <article class="kpi">
+          <span>Critical</span>
+          <strong id="kpi-critical" class="tone-critical">--</strong>
+          <small>reporting engines</small>
+        </article>
+        <article class="kpi">
+          <span>Stale</span>
+          <strong id="kpi-stale">--</strong>
+          <small id="kpi-stale-detail">older than 60 s</small>
+        </article>
+        <article class="kpi">
+          <span>Risk Exposure</span>
+          <strong id="kpi-exposure" class="tone-critical">--</strong>
+          <small>of reporting engines</small>
+        </article>
+      </section>
+
+      <section class="split">
+        <article class="card">
+          <h3>Fleet Health Distribution</h3>
+          <div class="donut-layout">
+            <canvas id="donut" width="220" height="220" aria-label="Fleet health donut"></canvas>
+            <ul id="donut-legend" class="legend"></ul>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head">
+            <h3>Top Risk Engines</h3>
+            <small id="ranking-meta"></small>
+          </div>
+          <div id="ranking" class="bars"></div>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h3>Engine Health Matrix</h3>
+          <div class="filters">
+            <input id="engine-search" type="search" placeholder="Search engine" aria-label="Search engines" />
+            <select id="status-filter" aria-label="Filter by status">
+              <option value="all">All statuses</option>
+              <option value="critical">Critical</option>
+              <option value="warning">Warning</option>
+              <option value="normal">Normal</option>
+              <option value="unknown">Unknown / stale</option>
+            </select>
+            <select id="engine-sort" aria-label="Sort engines">
+              <option value="id">Engine ID</option>
+              <option value="risk">Highest risk</option>
+              <option value="status">Status</option>
+            </select>
+          </div>
+        </div>
+        <div id="engine-grid" class="engine-grid"></div>
+        <article id="engine-detail" class="detail" hidden></article>
+      </section>
+
+      <section class="split">
+        <article class="card">
+          <div class="card-head">
+            <h3>Top-N Risk trend</h3>
+            <div class="filters">
+              <div class="segmented" role="group" aria-label="Trend window">
+                <button type="button" data-window="15m" class="is-active">15m</button>
+                <button type="button" data-window="30m">30m</button>
+                <button type="button" data-window="1h">1h</button>
+              </div>
+              <div class="segmented" role="group" aria-label="Top engines">
+                <button type="button" data-top="3" class="is-active">Top 3</button>
+                <button type="button" data-top="5">Top 5</button>
+              </div>
+            </div>
+          </div>
+          <div class="chart-wrap tall">
+            <canvas id="trend" aria-label="Failure probability trend"></canvas>
+          </div>
+          <ul id="trend-legend" class="legend inline"></ul>
+          <p id="replay-note" class="note"></p>
+        </article>
+        <article class="card">
+          <div class="card-head">
+            <h3>Risk Distribution</h3>
+            <small id="distribution-meta"></small>
+          </div>
+          <div id="histogram" class="histogram"></div>
+          <p id="sample-note" class="note"></p>
+        </article>
+      </section>
+
+      <section class="card insights">
+        <h3>Fleet Insights</h3>
+        <ul id="insights"></ul>
+        <p id="registry-note" class="note"></p>
+      </section>
+    </main>
+    <script src="/static/fleet.js"></script>
+  </body>
+</html>

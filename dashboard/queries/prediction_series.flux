@@ -1,0 +1,6 @@
+from(bucket: "${bucket}")
+  |> range(start: -${window})
+  |> filter(fn: (r) => r._measurement == "prediction")
+  |> filter(fn: (r) => r._field == "failure_probability" or r._field == "cycle")
+  |> group(columns: ["engine_id", "_field"])
+  |> sort(columns: ["_time"])

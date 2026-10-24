@@ -63,11 +63,14 @@ services:
     environment: *app-environment
     ports:
       - "127.0.0.1:${DASHBOARD_PORT:-8010}:8000"
+    volumes:
+      - ./models:/app/models:ro
+      - ./data/dashboard:/app/data/dashboard
     depends_on:
       - mosquitto
     restart: unless-stopped
 
-  simulator:
+  simulator: &simulator-service
     build: .
     command: ["python", "-m", "aiot_pm.simulator", "--engine", "100", "--interval", "0.25"]
     environment: *app-environment
@@ -78,6 +81,26 @@ services:
       - edge
       - dashboard
     restart: unless-stopped
+
+  simulator_095:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--engine", "95", "--interval", "0.25"]
+
+  simulator_096:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--engine", "96", "--interval", "0.25"]
+
+  simulator_097:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--engine", "97", "--interval", "0.25"]
+
+  simulator_098:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--engine", "98", "--interval", "0.25"]
+
+  simulator_099:
+    <<: *simulator-service
+    command: ["python", "-m", "aiot_pm.simulator", "--engine", "99", "--interval", "0.25"]
 
 volumes:
   influxdb-data:

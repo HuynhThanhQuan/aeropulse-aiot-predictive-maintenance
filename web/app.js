@@ -1,4 +1,13 @@
-const state = { engineId: null, sensor: "sensor_2", timer: null };
+const state = {
+  engineId: null,
+  sensor: "sensor_2",
+  timer: null,
+  delay: 700,
+  mode: "offline",
+  serverReachable: true,
+  requestSerial: 0,
+  commandNotes: {}
+};
 
 const byId = (id) => document.getElementById(id);
 const formatTime = (value) => value ? new Date(value).toLocaleTimeString() : "--";
@@ -78,26 +87,127 @@ function updateSensorOptions(telemetry) {
   select.value = state.sensor;
 }
 
-function renderEvents(events) {
+function describeEvent(event) {
+  const kind = event.kind;
+  const reason = String(event.reason || "");
+  let type = "Sự kiện";
+  let tone = "other";
+  let content = event.message || reason || event.action || event.state || kind || "Sự kiện khác";
+  if (kind === "alert") {
+    type = "Cảnh báo";
+    tone = "alert";
+    content = event.severity === "high"
+      ? "AI phát hiện rủi ro vượt ngưỡng cảnh báo"
+      : (event.message || "Cảnh báo từ edge");
+  } else if (kind === "command" && event.action === "schedule_maintenance") {
+    type = "Lệnh";
+    tone = "command";
+    content = "Đã gửi yêu cầu lên lịch bảo trì";
+  } else if (kind === "command" && event.action === "reset_maintenance") {
+    type = "Lệnh";
+    tone = "command";
+    content = "Đã gửi yêu cầu xóa cờ bảo trì";
+  } else if (kind === "command") {
+    type = "Lệnh";
+    tone = "command";
+  } else if (kind === "status" && event.state === "maintenance_scheduled") {
+    type = "Phản hồi";
+    tone = "status";
+    content = "Thiết bị xác nhận đã lên lịch bảo trì";
+  } else if (kind === "status" && event.state === "running") {
+    type = "Phản hồi";
+    tone = "status";
+    content = reason.toLowerCase().includes("maintenance flag reset")
+      ? "Thiết bị xác nhận đã xóa cờ bảo trì"
+      : "Thiết bị đang chạy";
+  } else if (kind === "status" && event.state === "restarting_replay") {
+    type = "Trạng thái";
+    tone = "status";
+    content = "Đã hết dữ liệu, chuẩn bị phát lại từ đầu";
+  } else if (kind === "status" && event.state === "online") {
+    type = "Trạng thái";
+    tone = "status";
+    content = "Simulator đã kết nối";
+  } else if (kind === "status" && event.state === "offline") {
+    type = "Trạng thái";
+    tone = "status";
+    content = "Simulator thông báo ngừng hoạt động";
+  } else if (kind === "status") {
+    type = "Trạng thái";
+    tone = "status";
+  }
+  let source = "—";
+  if (event.source === "automatic_closed_loop_controller") source = "Tự động";
+  else if (event.source === "operator_dashboard") source = "Thủ công";
+  return { type, tone, content, source };
+}
+
+function renderEvents(events, engineId) {
   byId("event-count").textContent = String(events.length);
   const body = byId("event-body");
   if (!events.length) {
-    body.innerHTML = '<tr><td colspan="4" class="empty">No events received</td></tr>';
+    body.innerHTML = '<tr><td colspan="5" class="empty">No events received</td></tr>';
     return;
   }
   body.innerHTML = events.map((event) => {
-    const stateValue = event.state || event.severity || event.action || "--";
-    const detail = event.message || event.reason || event.source || "--";
-    return `<tr><td>${escapeHtml(formatTime(event.timestamp))}</td><td>${escapeHtml(event.kind)}</td><td>${escapeHtml(stateValue)}</td><td>${escapeHtml(detail)}</td></tr>`;
+    const described = describeEvent(event);
+    return `<tr class="event-${described.tone}"><td>${escapeHtml(formatTime(event.timestamp))}</td><td>${escapeHtml(engineId || event.engine_id || "--")}</td><td>${escapeHtml(described.type)}</td><td>${escapeHtml(described.content)}</td><td>${escapeHtml(described.source)}</td></tr>`;
   }).join("");
 }
 
+function showWaiting(engineId) {
+  byId("cycle-value").textContent = "--";
+  byId("engine-value").textContent = engineId || "Waiting for telemetry";
+  byId("risk-value").textContent = "--";
+  byId("probability-value").textContent = "No prediction yet";
+  byId("latency-value").textContent = "--";
+  byId("maintenance-value").textContent = "--";
+  byId("state-value").textContent = "Awaiting device state";
+  byId("controller-state").textContent = "Monitoring";
+  const badge = byId("risk-badge");
+  badge.className = "badge badge-neutral";
+  badge.textContent = "NO DATA";
+  drawLineChart(byId("risk-chart"), [], { min: 0, max: 1, percent: true });
+  drawLineChart(byId("sensor-chart"), [], { color: "#276a9b" });
+  renderEvents([], engineId);
+  byId("command-result").textContent = state.commandNotes[engineId] || "";
+}
+
+function renderConnection(snapshot) {
+  const mode = snapshot.mode || "offline";
+  state.mode = mode;
+  const connection = byId("connection");
+  connection.className = `connection mode-${mode}`;
+  const label = byId("connection-label");
+  const detail = byId("connection-detail");
+  if (mode === "live") {
+    label.textContent = "LIVE";
+    detail.textContent = "";
+  } else if (mode === "stale") {
+    const seconds = Math.max(0, Math.floor(snapshot.seconds_since_last_message || 0));
+    label.textContent = "STALE";
+    detail.textContent = `no new data for ${seconds} s`;
+  } else {
+    label.textContent = "OFFLINE";
+    const updated = formatTime(snapshot.last_message_at);
+    detail.textContent = updated === "--"
+      ? "pipeline stopped, showing last saved data"
+      : `pipeline stopped, showing last saved data, last update ${updated}`;
+  }
+  const offline = mode === "offline" || !state.serverReachable;
+  byId("schedule-button").disabled = offline;
+  byId("reset-button").disabled = offline;
+}
+
 function render(snapshot) {
-  const connected = snapshot.connected;
-  byId("connection").className = connected ? "connection online" : "connection";
-  byId("connection").lastChild.textContent = connected ? "Connected" : "Offline";
-  updateEngineOptions(snapshot.engines, snapshot.engine_id);
-  state.engineId = snapshot.engine_id;
+  state.serverReachable = true;
+  byId("server-error").hidden = true;
+  renderConnection(snapshot);
+  const selected = state.engineId && (snapshot.engines || []).includes(state.engineId)
+    ? state.engineId
+    : snapshot.engine_id;
+  updateEngineOptions(snapshot.engines, selected);
+  state.engineId = selected;
 
   const telemetry = snapshot.telemetry || [];
   const predictions = snapshot.predictions || [];
@@ -123,43 +233,72 @@ function render(snapshot) {
   drawLineChart(byId("risk-chart"), predictions.map((prediction) => ({ cycle: prediction.cycle, value: prediction.failure_probability })), { min: 0, max: 1, percent: true, color: risk === "high" ? "#b42318" : "#0f766e" });
   const sensorPoints = telemetry.map((row) => ({ cycle: row.cycle, value: Number(row.sensors?.[state.sensor]) })).filter((point) => Number.isFinite(point.value));
   drawLineChart(byId("sensor-chart"), sensorPoints, { color: "#276a9b" });
-  renderEvents(snapshot.events || []);
+  renderEvents(snapshot.events || [], state.engineId);
+  byId("command-result").textContent = state.commandNotes[state.engineId] || "";
+}
+
+function scheduleRefresh() {
+  window.clearTimeout(state.timer);
+  state.timer = window.setTimeout(refresh, state.delay);
 }
 
 async function refresh() {
-  const query = state.engineId ? `?engine_id=${encodeURIComponent(state.engineId)}` : "";
+  const requestedId = state.engineId;
+  const serial = ++state.requestSerial;
+  const query = requestedId ? `?engine_id=${encodeURIComponent(requestedId)}` : "";
   try {
     const response = await fetch(`/api/snapshot${query}`, { cache: "no-store" });
-    render(await response.json());
+    if (!response.ok) throw new Error("snapshot failed");
+    const snapshot = await response.json();
+    if (serial !== state.requestSerial) return;
+    if (requestedId && snapshot.engine_id !== requestedId) return;
+    state.delay = 700;
+    render(snapshot);
   } catch (error) {
-    byId("connection").className = "connection";
-    byId("connection").lastChild.textContent = "Offline";
+    // Giữ biểu đồ cũ. Chỉ báo không tới được server và thử lại, lâu nhất 10 giây.
+    state.serverReachable = false;
+    state.delay = Math.min(state.delay * 2, 10000);
+    byId("server-error").hidden = false;
+    byId("schedule-button").disabled = true;
+    byId("reset-button").disabled = true;
+  } finally {
+    scheduleRefresh();
   }
 }
 
 async function sendCommand(action) {
-  if (!state.engineId) return;
+  const engineId = state.engineId;
+  if (!engineId) return;
   const buttons = [byId("schedule-button"), byId("reset-button")];
   buttons.forEach((button) => { button.disabled = true; });
   try {
     const response = await fetch("/api/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ engine_id: state.engineId, action })
+      body: JSON.stringify({ engine_id: engineId, action })
     });
     const payload = await response.json();
-    byId("command-result").textContent = response.ok ? `Command accepted at ${formatTime(payload.timestamp)}` : payload.detail;
+    const note = response.ok ? `Đã gửi yêu cầu lúc ${formatTime(payload.timestamp)}` : payload.detail;
+    state.commandNotes[engineId] = note;
+    if (state.engineId === engineId) byId("command-result").textContent = note;
   } catch (error) {
-    byId("command-result").textContent = "Command could not be delivered";
+    state.commandNotes[engineId] = "Command could not be delivered";
+    if (state.engineId === engineId) byId("command-result").textContent = state.commandNotes[engineId];
   } finally {
-    buttons.forEach((button) => { button.disabled = false; });
+    const offline = state.mode === "offline" || !state.serverReachable;
+    buttons.forEach((button) => { button.disabled = offline; });
   }
 }
 
-byId("engine-select").addEventListener("change", (event) => { state.engineId = event.target.value; refresh(); });
+byId("engine-select").addEventListener("change", (event) => {
+  state.engineId = event.target.value;
+  showWaiting(state.engineId);
+  refresh();
+});
 byId("sensor-select").addEventListener("change", (event) => { state.sensor = event.target.value; refresh(); });
 byId("schedule-button").addEventListener("click", () => sendCommand("schedule_maintenance"));
 byId("reset-button").addEventListener("click", () => sendCommand("reset_maintenance"));
+const requestedEngine = new URLSearchParams(window.location.search).get("engine");
+if (requestedEngine) state.engineId = requestedEngine;
 window.addEventListener("resize", () => refresh());
 refresh();
-state.timer = window.setInterval(refresh, 700);

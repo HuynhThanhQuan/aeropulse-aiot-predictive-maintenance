@@ -1,0 +1,348 @@
+[
+  {
+    "apiVersion": "influxdata.com/v2alpha1",
+    "kind": "Dashboard",
+    "metadata": {
+      "name": "general-dashboard"
+    },
+    "spec": {
+      "charts": [
+        {
+          "colors": [
+            {
+              "id": "base",
+              "name": "laser",
+              "type": "text",
+              "hex": "#32B08C"
+            },
+            {
+              "id": "critical",
+              "name": "ruby",
+              "type": "text",
+              "hex": "#DC4E58"
+            }
+          ],
+          "decimalPlaces": 0,
+          "height": 2,
+          "kind": "Single_Stat",
+          "name": "Reporting engines",
+          "noteOnEmpty": true,
+          "queries": [
+            {
+              "query": "import \"experimental\"\n\nfrom(bucket: \"telemetry\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"prediction\" and r._field == \"failure_probability\")\n  |> group(columns: [\"engine_id\"])\n  |> sort(columns: [\"_time\"])\n  |> last()\n  |> map(fn: (r) => ({_time: now(), _value: if r._time >= experimental.subDuration(d: 60s, from: now()) then 1.0 else 0.0}))\n  |> group()\n  |> sum()"
+            }
+          ],
+          "staticLegend": {},
+          "width": 2
+        },
+        {
+          "colors": [
+            {
+              "id": "base",
+              "name": "white",
+              "type": "text",
+              "hex": "#ffffff"
+            }
+          ],
+          "fieldOptions": [
+            {
+              "displayName": "Engine",
+              "fieldName": "Engine",
+              "visible": true
+            },
+            {
+              "displayName": "Cycle",
+              "fieldName": "Cycle",
+              "visible": true
+            },
+            {
+              "displayName": "Last Update",
+              "fieldName": "Last Update",
+              "visible": true
+            },
+            {
+              "displayName": "Status",
+              "fieldName": "Status",
+              "visible": true
+            },
+            {
+              "displayName": "Score",
+              "fieldName": "Score",
+              "visible": true
+            },
+            {
+              "displayName": "Maintenance",
+              "fieldName": "Maintenance",
+              "visible": false
+            }
+          ],
+          "height": 4,
+          "kind": "Table",
+          "name": "Engine Monitoring Overview",
+          "queries": [
+            {
+              "query": "staleAfter = 60\n\nfrom(bucket: \"telemetry\")\n    |> range(start: -24h)\n    |> filter(fn: (r) =>\n        r._measurement == \"prediction\" and\n        (\n            r._field == \"failure_probability\" or\n            r._field == \"predicted_class\" or\n            r._field == \"cycle\"\n        )\n    )\n    |> pivot(\n        rowKey: [\"_time\"],\n        columnKey: [\"_field\"],\n        valueColumn: \"_value\"\n    )\n    |> filter(fn: (r) => exists r.failure_probability)\n    |> group(columns: [\"engine_id\"])\n    |> sort(columns: [\"_time\"], desc: true)\n    |> limit(n: 1)\n    |> map(fn: (r) => {\n        ageSeconds =\n            (int(v: now()) - int(v: r._time))\n                / 1000000000\n\n        status =\n            if ageSeconds > staleAfter then\n                \"STALE DATA\"\n            else if exists r.predicted_class then\n                if int(v: r.predicted_class) == 1 then\n                    \"ALERT\"\n                else\n                    \"NO ALERT\"\n            else\n                \"LABEL UNAVAILABLE\"\n\n        return {\n            \"Engine\": r.engine_id,\n            \"Score\": float(v: r.failure_probability),\n            \"Status\": status,\n\n            \"Cycle\":\n                if exists r.cycle then\n                    string(v: int(v: r.cycle))\n                else\n                    \"—\",\n\n            \"Maintenance\": \"Not available\",\n\n            \"Last Update\":\n                if ageSeconds < 0 then\n                    \"Clock mismatch\"\n                else\n                    string(v: ageSeconds) + \"s ago\"\n        }\n    })\n    |> group()\n    |> sort(columns: [\"Score\"], desc: true)\n    |> yield(name: \"engine_monitoring\")"
+            }
+          ],
+          "staticLegend": {},
+          "tableOptions": {
+            "sortBy": "Score",
+            "verticalTimeAxis": true
+          },
+          "timeFormat": "YYYY-MM-DD HH:mm:ss",
+          "width": 6,
+          "yPos": 2
+        },
+        {
+          "axes": [
+            {
+              "name": "x"
+            },
+            {
+              "name": "y"
+            }
+          ],
+          "colors": [
+            {
+              "hex": "#31C0F6"
+            },
+            {
+              "hex": "#A500A5"
+            },
+            {
+              "hex": "#FF7E27"
+            }
+          ],
+          "height": 6,
+          "kind": "Mosaic",
+          "legendColorizeRows": true,
+          "legendOpacity": 1,
+          "legendOrientationThreshold": 100000000,
+          "name": "Alert State History",
+          "queries": [
+            {
+              "query": "from(bucket: \"telemetry\")\n    |> range(\n        start: v.timeRangeStart,\n        stop: v.timeRangeStop\n    )\n    |> filter(fn: (r) =>\n        r._measurement == \"prediction\" and\n        r._field == \"predicted_class\"\n    )\n    |> filter(fn: (r) => exists r.engine_id)\n    |> map(fn: (r) => ({\n        _time: r._time,\n        engine_id: r.engine_id,\n        _value:\n            if int(v: r._value) == 1 then\n                \"Alert\"\n            else\n                \"No Alert\"\n    }))\n    |> group()\n    |> sort(columns: [\"engine_id\", \"_time\"])\n    |> yield(name: \"alert_state_history\")"
+            }
+          ],
+          "staticLegend": {},
+          "width": 11,
+          "xCol": "_time",
+          "yPos": 6,
+          "ySeriesColumns": [
+            "engine_id"
+          ]
+        },
+        {
+          "colors": [
+            {
+              "id": "base",
+              "name": "white",
+              "type": "text",
+              "hex": "#ffffff"
+            }
+          ],
+          "fieldOptions": [
+            {
+              "displayName": "Engine",
+              "fieldName": "Engine",
+              "visible": true
+            },
+            {
+              "displayName": "Start Time",
+              "fieldName": "Start Time",
+              "visible": true
+            },
+            {
+              "displayName": "End Time",
+              "fieldName": "End Time",
+              "visible": true
+            },
+            {
+              "displayName": "Duration (s)",
+              "fieldName": "Duration (s)",
+              "visible": true
+            },
+            {
+              "displayName": "Peak Risk",
+              "fieldName": "Peak Risk",
+              "visible": true
+            },
+            {
+              "displayName": "Status",
+              "fieldName": "Status",
+              "visible": true
+            }
+          ],
+          "height": 5,
+          "kind": "Table",
+          "name": "Alert Episodes",
+          "queries": [
+            {
+              "query": "staleSeconds = 60\nstaleNs = staleSeconds * 1000000000\n\nreportTime =\n    if v.timeRangeStop < now() then\n        v.timeRangeStop\n    else\n        now()\n\nisLive = int(v: now()) - int(v: reportTime) <= staleNs\n\n// Read and combine prediction fields\ndata =\n    from(bucket: \"telemetry\")\n        |> range(\n            start: v.timeRangeStart,\n            stop: v.timeRangeStop\n        )\n        |> filter(fn: (r) =>\n            r._measurement == \"prediction\" and\n            (\n                r._field == \"predicted_class\" or\n                r._field == \"failure_probability\" or\n                r._field == \"cycle\"\n            )\n        )\n        |> map(fn: (r) => ({\n            r with _value: float(v: r._value)\n        }))\n        |> group(columns: [\"engine_id\"])\n        |> pivot(\n            rowKey: [\"_time\"],\n            columnKey: [\"_field\"],\n            valueColumn: \"_value\"\n        )\n        |> filter(fn: (r) =>\n            exists r.predicted_class and\n            exists r.failure_probability and\n            exists r.cycle\n        )\n        |> sort(columns: [\"_time\"])\n        |> map(fn: (r) => ({\n            engine_id: r.engine_id,\n            _time: r._time,\n            alarm: int(v: r.predicted_class),\n            risk: float(v: r.failure_probability),\n            time_delta: int(v: r._time),\n            cycle_delta: int(v: r.cycle)\n        }))\n\n        // Detect data gaps and simulation resets\n        |> difference(\n            columns: [\"time_delta\", \"cycle_delta\"],\n            keepFirst: true\n        )\n        |> map(fn: (r) => ({\n            r with\n            segment:\n                if not exists r.time_delta then 1\n                else if r.time_delta > staleNs then 1\n                else if exists r.cycle_delta and\n                    r.cycle_delta < 0 then 1\n                else 0\n        }))\n        |> cumulativeSum(columns: [\"segment\"])\n\n// Identify the latest segment for each engine\nlatest =\n    data\n        |> group(columns: [\"engine_id\"])\n        |> sort(columns: [\"_time\"])\n        |> last(column: \"segment\")\n        |> keep(columns: [\"engine_id\", \"segment\", \"_time\"])\n        |> rename(columns: {\n            segment: \"latest_segment\",\n            _time: \"latest_time\"\n        })\n\n// Identify and summarize alert episodes\nepisodes =\n    data\n        |> group(columns: [\"engine_id\", \"segment\"])\n        |> sort(columns: [\"_time\"])\n        |> map(fn: (r) => ({r with row_number: 1}))\n        |> cumulativeSum(columns: [\"row_number\"])\n        |> stateTracking(\n            fn: (r) => r.alarm == 1,\n            countColumn: \"alert_streak\"\n        )\n        |> map(fn: (r) => ({\n            r with\n            episode: if r.alert_streak == 1 then 1 else 0\n        }))\n        |> cumulativeSum(columns: [\"episode\"])\n        |> filter(fn: (r) => r.episode > 0)\n        |> group(columns: [\"engine_id\", \"segment\", \"episode\"])\n        |> sort(columns: [\"_time\"])\n        |> reduce(\n            identity: {\n                start_ns: 0,\n                end_ns: 0,\n                last_ns: 0,\n                peak: 0.0,\n                partial: false\n            },\n            fn: (r, accumulator) => ({\n                start_ns:\n                    if accumulator.start_ns == 0 then\n                        int(v: r._time)\n                    else\n                        accumulator.start_ns,\n\n                end_ns:\n                    if r.alarm == 0 and\n                        accumulator.end_ns == 0 then\n                        int(v: r._time)\n                    else\n                        accumulator.end_ns,\n\n                last_ns: int(v: r._time),\n\n                peak:\n                    if r.alarm == 1 and\n                        r.risk > accumulator.peak then\n                        r.risk\n                    else\n                        accumulator.peak,\n\n                partial:\n                    if accumulator.start_ns == 0 then\n                        r.row_number == 1\n                    else\n                        accumulator.partial\n            })\n        )\n        |> group(columns: [\"engine_id\"])\n\n// Build the final table\njoin(\n    tables: {episodes: episodes, latest: latest},\n    on: [\"engine_id\"],\n    method: \"inner\"\n)\n    |> group()\n    |> map(fn: (r) => {\n        ended = r.end_ns > 0\n\n        fresh =\n            int(v: reportTime) - int(v: r.latest_time)\n                <= staleNs\n\n        status =\n            if ended then \"Ended\"\n            else if r.segment != r.latest_segment then\n                \"Interrupted\"\n            else if not fresh then \"Data Stale\"\n            else if isLive then \"Active\"\n            else \"Open at range end\"\n\n        durationEnd =\n            if ended then r.end_ns else r.last_ns\n\n        return {\n            Engine: r.engine_id,\n            \"Start Time\": string(v: time(v: r.start_ns)),\n            \"End Time\":\n                if ended then\n                    string(v: time(v: r.end_ns))\n                else\n                    \"--\",\n            \"Duration (s)\":\n                float(v: durationEnd - r.start_ns)\n                    / 1000000000.0,\n            \"Peak Risk\": r.peak,\n            Status:\n                if r.partial then\n                    status + \" (partial start)\"\n                else\n                    status\n        }\n    })\n    |> sort(columns: [\"Start Time\"], desc: true)\n    |> yield(name: \"alert_episodes\")"
+            }
+          ],
+          "staticLegend": {},
+          "tableOptions": {
+            "verticalTimeAxis": true
+          },
+          "timeFormat": "YYYY-MM-DD HH:mm:ss",
+          "width": 11,
+          "yPos": 12
+        },
+        {
+          "colors": [
+            {
+              "id": "base",
+              "name": "laser",
+              "type": "text",
+              "hex": "#32B08C"
+            },
+            {
+              "id": "critical",
+              "name": "ruby",
+              "type": "text",
+              "hex": "#DC4E58"
+            }
+          ],
+          "decimalPlaces": 0,
+          "height": 2,
+          "kind": "Single_Stat",
+          "name": "Critical engines",
+          "noteOnEmpty": true,
+          "queries": [
+            {
+              "query": "import \"experimental\"\n\nfrom(bucket: \"telemetry\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"prediction\" and r._field == \"failure_probability\")\n  |> group(columns: [\"engine_id\"])\n  |> sort(columns: [\"_time\"])\n  |> last()\n  |> map(fn: (r) => ({_time: now(), _value: if r._time >= experimental.subDuration(d: 60s, from: now()) and r._value >= 0.620000 then 1.0 else 0.0}))\n  |> group()\n  |> sum()"
+            }
+          ],
+          "staticLegend": {},
+          "width": 2,
+          "xPos": 2
+        },
+        {
+          "colors": [
+            {
+              "id": "base",
+              "name": "laser",
+              "type": "text",
+              "hex": "#32B08C"
+            },
+            {
+              "id": "critical",
+              "name": "ruby",
+              "type": "text",
+              "hex": "#DC4E58"
+            }
+          ],
+          "decimalPlaces": 0,
+          "height": 2,
+          "kind": "Single_Stat",
+          "name": "Stale engines",
+          "noteOnEmpty": true,
+          "queries": [
+            {
+              "query": "import \"experimental\"\n\nfrom(bucket: \"telemetry\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"prediction\" and r._field == \"failure_probability\")\n  |> group(columns: [\"engine_id\"])\n  |> sort(columns: [\"_time\"])\n  |> last()\n  |> map(fn: (r) => ({_time: now(), _value: if r._time >= experimental.subDuration(d: 60s, from: now()) then 0.0 else 1.0}))\n  |> group()\n  |> sum()"
+            }
+          ],
+          "staticLegend": {},
+          "width": 2,
+          "xPos": 4
+        },
+        {
+          "colors": [
+            {
+              "id": "base",
+              "name": "laser",
+              "type": "text",
+              "hex": "#32B08C"
+            },
+            {
+              "id": "critical",
+              "name": "ruby",
+              "type": "text",
+              "hex": "#DC4E58"
+            }
+          ],
+          "decimalPlaces": 1,
+          "height": 2,
+          "kind": "Single_Stat",
+          "name": "Risk exposure %",
+          "noteOnEmpty": true,
+          "queries": [
+            {
+              "query": "import \"experimental\"\n\nfresh = from(bucket: \"telemetry\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"prediction\" and r._field == \"failure_probability\")\n  |> group(columns: [\"engine_id\"])\n  |> sort(columns: [\"_time\"])\n  |> last()\n  |> filter(fn: (r) => r._time >= experimental.subDuration(d: 60s, from: now()))\n\nfresh\n  |> map(fn: (r) => ({r with _value: if r._value >= 0.620000 then 1.0 else 0.0}))\n  |> group()\n  |> reduce(\n    fn: (r, accumulator) => ({\n      count: accumulator.count + 1.0,\n      above: accumulator.above + r._value,\n    }),\n    identity: {count: 0.0, above: 0.0},\n  )\n  |> map(fn: (r) => ({\n    _time: now(),\n    _value: if r.count == 0.0 then 0.0 else (r.above / r.count) * 100.0,\n  }))"
+            }
+          ],
+          "staticLegend": {},
+          "suffix": "%",
+          "width": 2,
+          "xPos": 6
+        },
+        {
+          "axes": [
+            {
+              "base": "10",
+              "name": "x",
+              "scale": "linear"
+            },
+            {
+              "base": "10",
+              "name": "y",
+              "scale": "linear"
+            }
+          ],
+          "colorizeRows": true,
+          "colors": [
+            {
+              "id": "wY2WY8ETdfh1F-YN9Xb7I",
+              "name": "Nineteen Eighty Four",
+              "type": "scale",
+              "hex": "#31C0F6"
+            },
+            {
+              "id": "MYK2NBPLclr3tpnfuDNxj",
+              "name": "Nineteen Eighty Four",
+              "type": "scale",
+              "hex": "#A500A5"
+            },
+            {
+              "id": "LklMOA38720JXO-Mu-So9",
+              "name": "Nineteen Eighty Four",
+              "type": "scale",
+              "hex": "#FF7E27"
+            }
+          ],
+          "geom": "line",
+          "height": 4,
+          "hoverDimension": "auto",
+          "kind": "Xy",
+          "legendColorizeRows": true,
+          "legendOpacity": 0.73,
+          "legendOrientationThreshold": 100000000,
+          "name": "Alerting Engines by Time Interval",
+          "opacity": 1,
+          "orientationThreshold": 100000000,
+          "position": "overlaid",
+          "queries": [
+            {
+              "query": "// Change to 30s, 1m, or 5m as needed\ninterval = 1m\n\nfrom(bucket: \"telemetry\")\n    |> range(\n        start: v.timeRangeStart,\n        stop: v.timeRangeStop\n    )\n    |> filter(fn: (r) =>\n        r._measurement == \"prediction\" and\n        r._field == \"predicted_class\"\n    )\n    |> map(fn: (r) => ({\n        r with\n        _value: if int(v: r._value) == 1 then 1 else 0\n    }))\n\n    // Group records by engine\n    |> group(columns: [\"engine_id\"])\n\n    // Divide time into separate intervals\n    |> window(\n        every: interval,\n        createEmpty: false\n    )\n\n    // Count each engine once if it reported any alert\n    |> max(column: \"_value\")\n\n    // Sum alerting engines within each interval\n    |> group(columns: [\"_start\", \"_stop\"])\n    |> sum(column: \"_value\")\n\n    // Label each interval by its start time\n    |> duplicate(column: \"_start\", as: \"_time\")\n    |> keep(columns: [\"_time\", \"_value\"])\n    |> group()\n    |> sort(columns: [\"_time\"])\n    |> set(\n        key: \"_field\",\n        value: \"Alerting Engines\"\n    )\n    |> yield(name: \"alerting_engines_by_interval\")"
+            }
+          ],
+          "staticLegend": {
+            "colorizeRows": true,
+            "opacity": 1,
+            "orientationThreshold": 100000000,
+            "widthRatio": 1
+          },
+          "width": 5,
+          "widthRatio": 1,
+          "xCol": "_time",
+          "xPos": 6,
+          "yCol": "_value",
+          "yPos": 2
+        }
+      ],
+      "description": "Fleet KPIs, health table, top risk, engine status, trend, and risk bins.",
+      "name": "GENERAL_DASHBOARD"
+    }
+  }
+]

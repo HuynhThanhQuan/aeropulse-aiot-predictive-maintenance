@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
+import pandas as pd
 import psutil
 from sklearn.metrics import (
     accuracy_score,
@@ -30,6 +31,19 @@ def dump(name, obj):
     (OUT / name).write_text(json.dumps(obj, indent=2))
 
 
+def host_cpu() -> str:
+    if sys.platform == "darwin":
+        return subprocess.check_output(
+            ["sysctl", "-n", "machdep.cpu.brand_string"], text=True
+        ).strip()
+    if sys.platform == "win32":
+        return str(subprocess.check_output(
+            ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_Processor).Name"],
+            text=True,
+        ).strip())
+    return platform.processor() or "unknown"
+
+
 def main():
     m = json.loads((ROOT / "models/metadata.json").read_text())
     threshold = m["decision_threshold"]
@@ -41,9 +55,7 @@ def main():
             "machine": platform.machine(),
             "python": sys.version,
             "onnxruntime": ort.__version__,
-            "cpu": (subprocess.check_output(
-                ["sysctl", "-n", "machdep.cpu.brand_string"], text=True
-            ).strip() if sys.platform == "darwin" else platform.processor() or "unknown"),
+            "cpu": host_cpu(),
             "ram_bytes": psutil.virtual_memory().total,
             "cpu_logical": psutil.cpu_count(),
             "scope": "Current development host; defense device not confirmed",
@@ -73,13 +85,31 @@ def main():
     test = load_cmapss(ROOT / "data/raw/test_FD001.txt")
     endpoints = np.loadtxt(ROOT / "data/raw/RUL_FD001.txt").astype(int)
     # Test trajectories end before failure: add official endpoint RUL to each within-engine offset.
-    test["rul"] = test["rul"] + test["unit_id"].map(
-        {i + 1: int(v) for i, v in enumerate(endpoints)}
+    observed_rul = test["rul"].to_numpy()
+    endpoint_rul = test["unit_id"].map({i + 1: int(v) for i, v in enumerate(endpoints)}).to_numpy()
+    if np.isnan(endpoint_rul).any():
+        raise RuntimeError("RUL_FD001.txt does not cover every test engine")
+    test["rul"] = observed_rul + endpoint_rul
+    rebuilt = (
+        test.groupby("unit_id")["cycle"].transform("max") - test["cycle"] + endpoint_rul
     )
+    if not np.array_equal(test["rul"].to_numpy(), rebuilt.to_numpy()):
+        raise RuntimeError("Official test RUL does not match max cycle - cycle + endpoint RUL")
     features = m["feature_names"]
     test[features] = (test[features] - np.asarray(m["scaler_mean"])) / np.asarray(m["scaler_scale"])
     x, y = build_windows(test, features, m["window_size"], m["warning_rul"])
-    last = np.cumsum([len(g) - m["window_size"] + 1 for _, g in test.groupby("unit_id")]) - 1
+    window_size = m["window_size"]
+    last_rows = []
+    for _, engine in test.groupby("unit_id", sort=True):
+        end = engine.iloc[-1]
+        if len(engine) >= window_size:
+            last_rows.append(end)
+    if len(last_rows) != len(endpoints):
+        raise RuntimeError(
+            f"Expected one final window per engine, got {len(last_rows)} for {len(endpoints)} endpoints"
+        )
+    last = np.cumsum([len(g) - window_size + 1 for _, g in test.groupby("unit_id")]) - 1
+    probabilities = {}
     evals = {}
     for variant in ["fp32", "int8"]:
         session = ort.InferenceSession(
@@ -87,12 +117,15 @@ def main():
         )
         logits = session.run(None, {"sensor_window": x})[0].reshape(-1)
         p = 1 / (1 + np.exp(-logits))
+        probabilities[variant] = p
         pred = p >= threshold
         evals[variant] = {}
         for scope, ix in [("all_windows", np.arange(len(y))), ("last_window_per_engine", last)]:
             yy = y[ix]
             pp = p[ix]
             yp = pred[ix]
+            matrix = confusion_matrix(yy, yp, labels=[0, 1])
+            tn, fp, fn, tp = matrix.ravel().tolist()
             evals[variant][scope] = {
                 "samples": len(ix),
                 "positives": int(yy.sum()),
@@ -101,10 +134,27 @@ def main():
                 "recall": recall_score(yy, yp, zero_division=0),
                 "f1": f1_score(yy, yp, zero_division=0),
                 "roc_auc": roc_auc_score(yy, pp),
-                "confusion_matrix_tn_fp_fn_tp": confusion_matrix(yy, yp, labels=[0, 1])
-                .ravel()
-                .tolist(),
+                "confusion_matrix": {
+                    "labels": {"rows": "true 0, true 1", "columns": "predicted 0, predicted 1"},
+                    "matrix": matrix.tolist(),
+                    "tn": tn,
+                    "fp": fp,
+                    "fn": fn,
+                    "tp": tp,
+                },
             }
+    pd.DataFrame(
+        {
+            "engine_id": [int(row.unit_id) for row in last_rows],
+            "cycle": [int(row.cycle) for row in last_rows],
+            "true_rul": [float(row.rul) for row in last_rows],
+            "true_label": y[last].astype(int),
+            "fp32_probability": probabilities["fp32"][last],
+            "fp32_predicted_class": (probabilities["fp32"][last] >= threshold).astype(int),
+            "int8_probability": probabilities["int8"][last],
+            "int8_predicted_class": (probabilities["int8"][last] >= threshold).astype(int),
+        }
+    ).to_csv(OUT / "official-test-last-window.csv", index=False)
     dump(
         "official-test-evaluation.json",
         {

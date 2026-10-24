@@ -11,5 +11,6 @@ RUN pip install --no-cache-dir -r requirements-runtime.txt
 COPY config ./config
 COPY src ./src
 COPY web ./web
+COPY dashboard/queries ./dashboard/queries
 
 CMD ["python", "-m", "aiot_pm.dashboard"]
