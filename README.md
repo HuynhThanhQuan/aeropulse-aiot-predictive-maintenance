@@ -11,6 +11,10 @@ Start with the [source and ONNX guide](docs/source-guide-vi.md), [demo runbook](
 **Start here:** [Architecture](#architecture) · [Quickstart](#quickstart) · [Benchmark results](#benchmark-results) · [AI Disclosure](#ai-disclosure)
 
 <a id="how-it-works"></a>
+## Demo video
+
+[Watch the AeroPulse demo — engine console and fleet dashboard](https://drive.google.com/file/d/1aazBNyr9DIrByg_L79K_qX_uoUC895OS/view?usp=sharing).
+
 ## Architecture
 
 ```mermaid
