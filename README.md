@@ -12,19 +12,40 @@ For the presentation, start with the [Vietnamese walkthrough](docs/defense-guide
 
 ```mermaid
 flowchart LR
-    Data[NASA FD001] --> Simulator[Sensor replay simulator]
-    Simulator -->|telemetry| MQTT[Mosquitto MQTT]
-    MQTT --> Edge[ONNX INT8 edge inference]
-    Edge -->|prediction and alert| MQTT
-    MQTT --> Storage[Storage service]
-    Storage --> DB[InfluxDB 2.7]
-    MQTT --> UI[Engine console]
-    DB --> Fleet[Fleet dashboard]
-    MQTT --> Controller[Maintenance controller]
-    Controller -->|command| MQTT
-    MQTT -->|command| Simulator
-    Simulator -->|acknowledged status| MQTT
+    Data["NASA FD001 replay data<br/>Engines 095–100"] --> Sim["6 engine simulators"]
+    Sim -->|telemetry| Broker["Mosquitto<br/>MQTT broker"]
+    Sim -->|status: command acknowledgement| Broker
+    Broker -->|command: schedule or reset maintenance| Sim
+
+    subgraph EdgeService["Edge service — separate state for each engine"]
+        Buffer["Per-engine rolling buffer"] --> Window["30 cycles × 14 sensors<br/>StandardScaler normalization"]
+        Window --> CNN["1D-CNN INT8<br/>ONNX Runtime"]
+    end
+    Broker -->|telemetry| Buffer
+    CNN -->|prediction and alert| Broker
+
+    Broker -->|alert and status| Controller["Maintenance controller"]
+    Controller -->|command: schedule maintenance| Broker
+
+    Broker -->|telemetry, prediction, alert, command, status| Console["Engine console<br/>Live MQTT + SQLite offline cache"]
+    Console -->|manual command: schedule or reset| Broker
+
+    Broker -->|telemetry, prediction, alert, status| Storage["Storage service"]
+    Storage --> DB[("InfluxDB")]
+    DB -->|Flux queries| Fleet["Fleet dashboard<br/>Overview of all 6 engines"]
+
+    classDef broker fill:#fff3cd,stroke:#9a6700,stroke-width:2px,color:#24292f
+    classDef inference fill:#eaf2ff,stroke:#0969da,color:#24292f
+    classDef view fill:#e6f4ea,stroke:#1a7f37,color:#24292f
+    class Broker broker
+    class Buffer,Window,CNN inference
+    class Console,Fleet view
 ```
+
+Read the diagram from the simulators through Mosquitto to the consumers. Edge keeps a separate 30-cycle window for each engine and sends its predictions back through the broker. On an alert, the controller sends a maintenance command to that engine; the simulator returns a `status` message to confirm the change. The console can also send commands manually.
+
+The two dashboards read different sources: the engine console follows MQTT messages and keeps a local SQLite cache, while the fleet overview reads stored predictions from InfluxDB using Flux. Arrows show message or data flow; they do not represent separate containers for every box.
+
 
 Docker Compose starts twelve services: `mosquitto`, `influxdb`, `edge`, `storage`, `dashboard`, `controller`, `simulator` (100), and `simulator_095` through `simulator_099`. Training runs on the host; runtime containers do not install PyTorch. The engine console subscribes to MQTT and persists a bounded SQLite cache. The fleet dashboard queries historical InfluxDB predictions through server-side Flux.
 
